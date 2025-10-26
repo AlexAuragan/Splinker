@@ -1,7 +1,8 @@
 [project]
 name = "splinker"
 version = "0.1.0"
-description = "Add your description here"
+author = "AlexAuragan"
+description = "Tool to compose your own color palettes"
 requires-python = ">=3.12"
 dependencies = [
     "pyside6>=6.10.0",

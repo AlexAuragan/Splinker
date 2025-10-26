@@ -1,3 +1,6 @@
-#Bar {
-    background-color: #808080;
+QToolBar#Bar {
+    background-color: #999999;
+    border: none;
+    padding: 0px;
+    border-radius: 4px;
 }

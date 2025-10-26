@@ -19,14 +19,6 @@ class MenuBar(QtWidgets.QTabWidget):
         self._palette_tab = QtWidgets.QWidget(self)
         self._actions_tab = QtWidgets.QWidget(self)
 
-        pal_lay = QtWidgets.QHBoxLayout()
-        pal_lay.setContentsMargins(6, 6, 6, 6)
-        pal_lay.setSpacing(6)
-        self._palette_bar = PaletteGradientBar(self._palette_tab)
-        pal_lay.addWidget(self._palette_bar)
-        pal_lay.addStretch(1)  # room for future widgets
-        self._palette_tab.setLayout(pal_lay)
-
         # Basic placeholder layouts for future tabs
         self._palette_tab.setLayout(QtWidgets.QVBoxLayout())
         self._palette_tab.layout().addStretch(1)
