@@ -17,11 +17,11 @@ You need to have python, install the required packages and run main.py
 # Roadmap
 
  * [ ] Have a python API for the color manipulation parts 
- * [ ] Preview of the color palette
+ * [x] Preview of the color palette
    * [x] Simple gradient preview
    * [ ] Preview on some PNG
    * [ ] Preview on some UI
- * [ ] Ability to have more than one path (i.e. one for the rainbow and one for the gray scale)
+ * [x] Ability to have more than one path (i.e. one for the rainbow and one for the gray scale)
  * [ ] Import / Export color palette, as well as a css file
  * [x] Have the ability to apply the color palette on a PNG ([on another repo](https://github.com/AlexAuragan/PyPalette/tree/dev)) 
  * [ ] Add more spline types
