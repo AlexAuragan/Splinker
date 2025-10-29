@@ -1,6 +1,6 @@
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from splinker.widgets.gradients import GradientOverlayWidget
+from splinker.widgets.gradients_overlay import GradientOverlayWidget
 from splinker.core.splines import Spline, CatmullRomSpline
 
 

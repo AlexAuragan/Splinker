@@ -21,7 +21,7 @@ class HSVa:
         return self.h, self.s, self.v, self.a
 
 
-class Gradient2D(ABC):
+class Gradient(ABC):
     """
     Pure theoretical 2D gradient: operates in an arbitrary continuous
     coordinate space (no pixels or frameworks involved).
@@ -46,7 +46,7 @@ class Gradient2D(ABC):
         pass
 
 
-class HsvWheelGradient(Gradient2D):
+class HsvWheelGradient(Gradient):
     """
     Hue-Saturation wheel (Value fixed), centered at (cx, cy) with radius R.
 
@@ -60,7 +60,7 @@ class HsvWheelGradient(Gradient2D):
     we pick angle = 0° by convention for the inverse (center if s==0).
     """
 
-    def __init__(self, cx: float, cy: float, radius: float, /, *, value: int = 255, alpha: int = 255):
+    def __init__(self, cx: float = 300, cy: float = 300, radius: float = 298, /, *, value: int = 255, alpha: int = 255):
         self.cx = float(cx)
         self.cy = float(cy)
         self.R = float(radius)
@@ -125,4 +125,76 @@ class HsvWheelGradient(Gradient2D):
 
         # By construction, point is inside (or on) the wheel for s∈[0,255]
         # Still, we enforce geometry consistency:
+        return (x, y) if self.contains_point(x, y) else None
+
+
+class HsvSquareGradient(Gradient):
+    """
+    HSV square for a given hue:
+      - X axis: value/brightness (black → white/color)
+      - Y axis: saturation (white → pure color)
+      - hue: fixed
+      - alpha: fixed
+
+    The square is centered at (cx, cy) with side length S.
+    HSV ranges:
+      - hue: fixed (0..359)
+      - saturation: 0..255 (top→bottom)
+      - value: 0..255 (left→right)
+      - alpha: fixed
+    """
+
+    def __init__(self, cx: float = 300, cy: float = 300, size: float = 298, /, *, hue: int = 0, alpha: int = 255):
+        self.cx = float(cx)
+        self.cy = float(cy)
+        self.S = float(size)
+        self.hue = int(max(-1, min(359, hue)))
+        self.alpha = int(max(0, min(255, alpha)))
+
+        # precompute geometry
+        half = self.S * 0.5
+        self.x0 = self.cx - half
+        self.y0 = self.cy - half
+        self.x1 = self.cx + half
+        self.y1 = self.cy + half
+
+    # --- geometry check
+    def contains_point(self, x: float, y: float, /) -> bool:
+        if self.S <= 0.0:
+            return False
+        return (self.x0 <= x <= self.x1) and (self.y0 <= y <= self.y1)
+
+    # --- forward: (x, y) -> HSVa
+    def color_at(self, x: float, y: float, /) -> Optional[HSVa]:
+        if self.S <= 0.0 or not self.contains_point(x, y):
+            return None
+
+        # horizontal: value 0..255 (black→white)
+        tx = (x - self.x0) / self.S
+        # vertical: saturation 0..255 (top→bottom)
+        ty = (y - self.y0) / self.S
+
+        s = int(round(max(0.0, min(1.0, ty)) * 255.0))
+        v = int(round(max(0.0, min(1.0, tx)) * 255.0))
+
+        return HSVa(h=self.hue, s=s, v=v, a=self.alpha)
+
+    # --- inverse: HSVa -> (x, y)
+    def point_for_color(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
+        if self.S <= 0.0:
+            return None
+
+        h, s, v, a = color.get_hsva()
+
+        if h != self.hue or a != self.alpha:
+            return None
+        if s < 0 or s > 255 or v < 0 or v > 255:
+            return None
+
+        tx = v / 255.0
+        ty = s / 255.0
+
+        x = self.x0 + tx * self.S
+        y = self.y0 + ty * self.S
+
         return (x, y) if self.contains_point(x, y) else None

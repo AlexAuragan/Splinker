@@ -1,8 +1,8 @@
 from PySide6 import QtCore, QtGui, QtWidgets
-from splinker.core.gradient import Gradient2D
+from splinker.core.gradients import Gradient
 
 class GradientOverlayWidget(QtWidgets.QWidget):
-    def __init__(self, gradient: Gradient2D):
+    def __init__(self, gradient: Gradient):
         super().__init__()
 
         self.setMouseTracking(True)

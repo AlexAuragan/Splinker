@@ -1,5 +1,6 @@
 from PySide6 import QtWidgets, QtCore, QtGui
 
+from splinker.core import gradient_registry
 from splinker.widgets import Overlay
 
 
@@ -21,6 +22,11 @@ class LayerItem(QtWidgets.QWidget):
         self._layer_name = name
         self._layer_idx = -1
 
+        self._gear = QtWidgets.QToolButton(self)
+        self._gear.setText("⋯")
+        self._gear.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self._gear.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+
         # find layer idx by name
         for i in range(len(self._overlay)):
             if self._overlay.layer_name_at(i) == self._layer_name:
@@ -37,8 +43,8 @@ class LayerItem(QtWidgets.QWidget):
 
         head = QtWidgets.QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
-        head.addWidget(self._title)
-        head.addStretch(1)
+        head.addWidget(self._title, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
+        head.addWidget(self._gear, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(6, 6, 6, 6)
         lay.addLayout(head)
@@ -56,6 +62,16 @@ class LayerItem(QtWidgets.QWidget):
                 self.spline.pointsChanged.connect(self.refresh)
             except Exception:
                 pass
+
+        menu = QtWidgets.QMenu(self._gear)
+        grad_menu = menu.addMenu("Gradient")
+        # Build the gradient list from the registry (name -> class)
+        for name, grad_cls in gradient_registry.items():
+            act = grad_menu.addAction(name)
+            # bind class to action
+            act.triggered.connect(lambda _=False, cls=grad_cls: self._apply_registry_gradient(cls))
+
+        self._gear.setMenu(menu)
 
         self._overlay.overlayUpdated.connect(self._on_overlay_updated)
         self._overlay.layerNameChanged.connect(self._on_layer_name_changed)
@@ -318,4 +334,32 @@ class LayerItem(QtWidgets.QWidget):
 
     def _activate_self(self):
         self._overlay.set_active_layer(self._layer_idx)
+        self.requestActivate.emit(self)
+
+    def _apply_registry_gradient(self, grad_cls):
+        """
+        Instantiate the selected gradient class using its own defaults,
+        and apply it to the active layer's GradientOverlayWidget.
+        """
+        try:
+            gw = self._overlay[self._layer_idx].gradient  # GradientOverlayWidget
+        except Exception:
+            return
+        if gw is None:
+            return
+
+        # Try to build the gradient with no args
+        try:
+            new_grad = grad_cls()
+        except Exception:
+            # if the class absolutely requires args, skip it silently
+            return
+
+        # Apply to overlay widget
+        try:
+            gw.set_gradient(new_grad)
+            gw.update()
+        except Exception:
+            pass
+
         self.requestActivate.emit(self)

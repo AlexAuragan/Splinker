@@ -5,8 +5,6 @@ from PySide6 import QtCore, QtWidgets
 from menu.bar import Bar
 from splinker.menu.left_bar import MenuBar, PaletteGradientBar
 from widgets import Overlay
-from splinker.core.gradient import HsvWheelGradient
-
 
 class MyWidget(QtWidgets.QWidget):
     def __init__(self):

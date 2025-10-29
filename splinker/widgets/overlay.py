@@ -1,7 +1,7 @@
 from PySide6 import QtWidgets, QtCore
 
-from splinker.core.gradient import HsvWheelGradient
-from splinker.widgets.gradients import GradientOverlayWidget
+from splinker.core.gradients import HsvWheelGradient, HsvSquareGradient
+from splinker.widgets.gradients_overlay import GradientOverlayWidget
 from splinker.widgets.spline_overlay import SplineOverlayWidget
 
 
@@ -72,7 +72,8 @@ class Overlay(QtWidgets.QWidget):
     def add_overlay(self,
                     gradient: GradientOverlayWidget | None = None,
                     spline: SplineOverlayWidget | None = None) -> int:
-        grad = gradient or GradientOverlayWidget(HsvWheelGradient(300, 300, 298))
+        # grad = gradient or GradientOverlayWidget(HsvWheelGradient(300, 300, 298))
+        grad = gradient or GradientOverlayWidget(HsvSquareGradient(300, 300, 298, hue=0))
         spl = spline or SplineOverlayWidget(grad)
 
         # each overlay is a small stacked container of gradient + spline
