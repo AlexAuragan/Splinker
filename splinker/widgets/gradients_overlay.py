@@ -1,4 +1,6 @@
 from PySide6 import QtCore, QtGui, QtWidgets
+
+from splinker.core import Point
 from splinker.core.gradients import Gradient
 
 class GradientOverlayWidget(QtWidgets.QWidget):
@@ -152,13 +154,15 @@ class GradientOverlayWidget(QtWidgets.QWidget):
             return None
         return QtGui.QColor.fromRgba(self._bg.pixel(x, y))
 
-    def colors_for_points(self, pts: list[QtCore.QPointF], /) -> list[QtGui.QColor | None]:
+    def colors_for_points(self, pts: list[QtCore.QPointF | Point], /) -> list[QtGui.QColor | None]:
         """
         Convenience: sample a list of points (widget coords).
         """
         self._ensure_bg_current()
         out: list[QtGui.QColor | None] = []
         for p in pts:
+            if not isinstance(p, QtCore.QPointF):
+                p = QtCore.QPointF(p[0], p[1])
             out.append(self.color_at(p))
         return out
 

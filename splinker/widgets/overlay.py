@@ -29,7 +29,7 @@ class Overlay(QtWidgets.QWidget):
         self._stack.setStackingMode(QtWidgets.QStackedLayout.StackingMode.StackOne)
 
         self._gradients: list[GradientOverlayWidget] = []
-        self._splines: list[SplineOverlayWidget] = []
+        self._layer: list[SplineOverlayWidget] = []
         self._names: list[str] = []
         self._active_idx = -1
 
@@ -44,9 +44,9 @@ class Overlay(QtWidgets.QWidget):
         return self._gradients[self._active_idx]
 
     @property
-    def spline(self):
-        # active spline
-        return self._splines[self._active_idx]
+    def layer(self) -> SplineOverlayWidget:
+        # active layer
+        return self._layer[self._active_idx]
 
     def get_active_idx(self):
         return self._active_idx
@@ -85,18 +85,11 @@ class Overlay(QtWidgets.QWidget):
 
         idx = len(self._gradients)
         self._gradients.append(grad)
-        self._splines.append(spl)
+        self._layer.append(spl)
         self._names.append(f"Layer {idx + 1}")
         self._stack.addWidget(container)
 
-        # re-emit spline updates as overlayUpdated(idx)
-        sig = spl.pointsChanged
-        if sig is not None:
-            try:
-                sig.connect(lambda i=idx: self.overlayUpdated.emit(i))
-            except Exception:
-                pass
-
+        spl.pointsChanged.connect(lambda i=idx: self.overlayUpdated.emit(i))
         self.overlaysChanged.emit()
         self.overlayUpdated.emit(idx)
         return idx
@@ -111,8 +104,8 @@ class Overlay(QtWidgets.QWidget):
         return self._stack.count()
 
     def spline_at(self, index: int) -> SplineOverlayWidget | None:
-        if 0 <= index < len(self._splines):
-            return self._splines[index]
+        if 0 <= index < len(self._layer):
+            return self._layer[index]
         return None
 
     def __getitem__(self, key):
@@ -121,7 +114,7 @@ class Overlay(QtWidgets.QWidget):
             if 0 <= key < len(self._gradients):
                 return type("OverlayEntry", (), {
                     "gradient": self._gradients[key],
-                    "spline": self._splines[key],
+                    "layer": self._layer[key],
                     "name": self._names[key],
                 })()
             raise IndexError(key)

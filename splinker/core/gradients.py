@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+from splinker.core.registries import register_gradient
+
 
 @dataclass(frozen=True)
 class HSVa:
@@ -45,7 +47,7 @@ class Gradient(ABC):
     def point_for_color(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
         pass
 
-
+@register_gradient("HSV Wheel")
 class HsvWheelGradient(Gradient):
     """
     Hue-Saturation wheel (Value fixed), centered at (cx, cy) with radius R.
@@ -127,7 +129,7 @@ class HsvWheelGradient(Gradient):
         # Still, we enforce geometry consistency:
         return (x, y) if self.contains_point(x, y) else None
 
-
+@register_gradient("HSV Square")
 class HsvSquareGradient(Gradient):
     """
     HSV square for a given hue:

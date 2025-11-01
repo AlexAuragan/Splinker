@@ -1,7 +1,9 @@
 from PySide6 import QtWidgets, QtCore, QtGui
 
-from splinker.core import gradient_registry
+from splinker.core import gradient_registry, point_editor_registry
 from splinker.widgets import Overlay
+from splinker.core.point_editors import PointEditorComponent
+from splinker.widgets.spline_overlay import SplineOverlayWidget
 
 
 class LayerItem(QtWidgets.QWidget):
@@ -32,6 +34,11 @@ class LayerItem(QtWidgets.QWidget):
             if self._overlay.layer_name_at(i) == self._layer_name:
                 self._layer_idx = i
                 break
+        if self._layer_idx < 0:
+            try:
+                self._layer_idx = self._overlay.get_active_idx()
+            except Exception:
+                self._layer_idx = 0 if len(self._overlay) > 0 else -1
 
         self._title = QtWidgets.QLabel(self._layer_name)
         self._title.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
@@ -56,20 +63,20 @@ class LayerItem(QtWidgets.QWidget):
         self._list.customContextMenuRequested.connect(self._on_context_menu)
         self._list.itemSelectionChanged.connect(self._activate_self)
 
-        # live refresh with spline changes if available
-        if self.spline is not None and hasattr(self.spline, "pointsChanged"):
-            try:
-                self.spline.pointsChanged.connect(self.refresh)
-            except Exception:
-                pass
+        # live refresh with spline changes
+        self.layer.pointsChanged.connect(self.refresh)
 
         menu = QtWidgets.QMenu(self._gear)
         grad_menu = menu.addMenu("Gradient")
-        # Build the gradient list from the registry (name -> class)
         for name, grad_cls in gradient_registry.items():
             act = grad_menu.addAction(name)
             # bind class to action
             act.triggered.connect(lambda _=False, cls=grad_cls: self._apply_registry_gradient(cls))
+        spline_menu = menu.addMenu("Spline type")
+        for key, editor_cls in point_editor_registry.items():  # dict[str, type[PointEditorComponent]]
+            act = spline_menu.addAction(key)
+            # bind the registry key to the action
+            act.triggered.connect(lambda _=False, k=key: self._apply_point_editor(k))
 
         self._gear.setMenu(menu)
 
@@ -78,15 +85,19 @@ class LayerItem(QtWidgets.QWidget):
         self.refresh()
 
     @property
-    def layer_name(self):
-        return self.overlay[self._layer_idx].name
+    def layer_name(self) -> str:
+        if self._layer_idx < 0 or self._layer_idx >= len(self._overlay):
+            return "Overlay"
+        return self._overlay[self._layer_idx].name
 
     @property
-    def spline(self):
-        return self._overlay[self._layer_idx].spline
+    def layer(self) -> SplineOverlayWidget:
+        if self._layer_idx < 0 or self._layer_idx >= len(self._overlay):
+            raise ValueError(self._layer_idx)
+        return self._overlay[self._layer_idx].layer
 
     @property
-    def overlay(self):
+    def overlay(self) -> Overlay:
         return self._overlay
 
     # ----- inline title editing ----------------------------------------
@@ -152,27 +163,17 @@ class LayerItem(QtWidgets.QWidget):
 
     # ----- data refresh ------------------------------------------------------
     def refresh(self, /):
-        if self.spline is None:
+        if self.layer is None:
             self._list.clear()
             return
 
         # points
-        pts = []
-        if hasattr(self.spline, "points"):
-            try:
-                pts_attr = self.spline.points
-                pts = pts_attr() if callable(pts_attr) else (pts_attr or [])
-            except Exception:
-                pts = []
+        pts_attr = self.layer.points
+        pts = pts_attr() if callable(pts_attr) else (pts_attr or [])
 
         # colors
-        colors = None
-        if hasattr(self.spline, "point_colors"):
-            try:
-                pc_attr = self.spline.point_colors
-                colors = pc_attr() if callable(pc_attr) else pc_attr
-            except Exception:
-                colors = None
+        pc_attr = self.layer.point_colors
+        colors = pc_attr() if callable(pc_attr) else pc_attr
 
         self.set_points_and_colors(pts or [], colors)
 
@@ -203,7 +204,8 @@ class LayerItem(QtWidgets.QWidget):
     # ----- formatting & painting --------------------------------------------
     def _format_rgb_text(self, idx: int, color: QtGui.QColor | None, /) -> str:
         if color is None or not color.isValid():
-            return f"{idx:02d}: (?, ?, ?)"
+            raise ValueError(color)
+            # return f"{idx:02d}: (?, ?, ?)"
         r, g, b = color.red(), color.green(), color.blue()
         return f"{idx:02d}: {r}, {g}, {b}"
 
@@ -224,7 +226,7 @@ class LayerItem(QtWidgets.QWidget):
 
     # ----- context menu / add point -----------------------------------------
     def _on_context_menu(self, pos):
-        if self.spline is None:
+        if self.layer is None:
             return
         self._activate_self()
         menu = QtWidgets.QMenu(self)
@@ -234,7 +236,7 @@ class LayerItem(QtWidgets.QWidget):
             self._add_point_via_color()
 
     def _add_point_via_color(self, /):
-        if self.spline is None:
+        if self.layer is None:
             return
 
         initial = QtGui.QColor(255, 255, 255)
@@ -259,24 +261,60 @@ class LayerItem(QtWidgets.QWidget):
             return
 
     # ----- editing handlers --------------------------------------------------
+    def _notify(self, text: str):
+        QtWidgets.QToolTip.showText(QtGui.QCursor.pos(), text, self)
+
+    # --- helper: validate color is available in current gradient ----------------
+    def _color_supported(self, color: QtGui.QColor) -> bool:
+        return self._overlay[self._layer_idx].gradient.point_for_color(color) is not None
+
+    def _apply_color_edit_row(self, idx: int, color: QtGui.QColor):
+        if not (isinstance(color, QtGui.QColor) and color.isValid()):
+            return
+        # validate against gradient
+        try:
+            gw = self._overlay[self._layer_idx].gradient
+        except Exception:
+            gw = None
+        if gw is None or not hasattr(gw, "point_for_color"):
+            return
+        pt = gw.point_for_color(color)
+        if pt is None:
+            self._notify("Color not available in this gradient")
+            return
+
+        # 1) move the path point on the canvas
+        path = self.layer._path
+        if 0 <= idx < len(path.points):
+            path.edit_point(idx, (float(pt.x()), float(pt.y())))
+            self.layer.update()
+            self._overlay.overlayUpdated.emit(self._layer_idx)
+
+        # 2) refresh the row’s item (re-fetch to avoid stale pointer)
+        item = self._list.item(idx)
+        if item is None or self._is_adder_item(item):
+            return
+        try:
+            self._apply_color_edit(idx, item, color)
+        except RuntimeError:
+            pass
+
     def _on_item_double_clicked(self, item: QtWidgets.QListWidgetItem):
-        if self.spline is None:
+        if self.layer is None:
             return
         if self._is_adder_item(item):
             self._add_point_via_color()
             return
-
         idx = self._list.row(item)
         start = item.data(QtCore.Qt.UserRole)
         initial = start if isinstance(start, QtGui.QColor) else QtGui.QColor(255, 255, 255)
-
         color = QtWidgets.QColorDialog.getColor(initial, self, "Choose color")
         if not color.isValid():
             return
-        self._apply_color_edit(idx, item, color)
+        self._apply_color_edit_row(idx, color)
 
     def _on_item_changed(self, item: QtWidgets.QListWidgetItem):
-        if self._block_item_changed or self.spline is None or self._is_adder_item(item):
+        if self._block_item_changed or self.layer is None or self._is_adder_item(item):
             return
         idx = self._list.row(item)
         txt = item.text()
@@ -290,7 +328,19 @@ class LayerItem(QtWidgets.QWidget):
             self._revert_item(idx, item)
             return
         color = QtGui.QColor(r, g, b)
-        self._apply_color_edit(idx, item, color)
+        if not color.isValid() or not self._color_supported(color):
+            self._notify("Color not available in this gradient")
+            self._revert_item(idx, item)
+            return
+        # re-fetch item to avoid stale pointer
+        fresh = self._list.item(idx)
+        if fresh is None or self._is_adder_item(fresh):
+            return
+        try:
+            self._apply_color_edit(idx, fresh, color)
+        except RuntimeError:
+            # list rebuilt meanwhile; nothing to do
+            pass
 
     def _apply_color_edit(self, idx: int, item: QtWidgets.QListWidgetItem, color: QtGui.QColor, /):
         self._block_item_changed = True
@@ -334,7 +384,7 @@ class LayerItem(QtWidgets.QWidget):
 
     def _activate_self(self):
         self._overlay.set_active_layer(self._layer_idx)
-        self.requestActivate.emit(self)
+        self.requestActivate.emit(self._overlay)
 
     def _apply_registry_gradient(self, grad_cls):
         """
@@ -362,4 +412,24 @@ class LayerItem(QtWidgets.QWidget):
         except Exception:
             pass
 
-        self.requestActivate.emit(self)
+        self.requestActivate.emit(self._overlay)
+
+    def _apply_point_editor(self, key: str):
+        """
+        Switch the active layer's point editor to the given registry key.
+        Converts the current path to the new editor (best-effort fit), updates UI,
+        and emits overlayUpdated so dependents refresh.
+        """
+        # Resolve editor class
+        editor_cls = point_editor_registry[key]
+        # Build editor instance
+        new_editor: PointEditorComponent = editor_cls()
+
+        # Convert current path on the SplineOverlayWidget
+        layer = self.layer  # SplineOverlayWidget
+        path = layer._path  # Path (as in your SplineOverlayWidget)
+        path.set_point_editor(new_editor)  # uses the fit/interpolate helpers you added
+        layer.update()
+
+        # Notify observers (left bar list, gradient bar, etc.)
+        self._overlay.overlayUpdated.emit(self._layer_idx)

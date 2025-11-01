@@ -27,7 +27,7 @@ class MyWidget(QtWidgets.QWidget):
         self.layout.addLayout(self.main_layout)
 
         self.overlay.overlayUpdated.connect(self.menu_bar.refresh)
-        self.overlay.spline.pointsChanged.connect(self.menu_bar.refresh)
+        self.overlay.layer.pointsChanged.connect(self.menu_bar.refresh)
 
 
 

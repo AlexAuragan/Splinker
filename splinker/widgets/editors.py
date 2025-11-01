@@ -7,8 +7,59 @@ EditorFactory = Callable[[], "IGradientEditor"]
 class IGradientEditor(QtWidgets.QWidget):
     gradientChanged = QtCore.Signal(object)  # emits a core.Gradient
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._throttle_ms = 300
+        self._emit_timer = QtCore.QTimer(self)
+        self._emit_timer.setSingleShot(True)
+        self._emit_timer.timeout.connect(self._emit_now)
+        self._leading_lock = False     # optional "leading edge" behavior
+
+    # --- public API kept -----------------------------------------------------
     def setGradient(self, grad: Gradient | None) -> None: ...
     def gradient(self) -> Gradient | None: ...
+
+    # --- throttle controls (optional to call) --------------------------------
+    def setThrottleMs(self, ms: int) -> None:
+        """Set debounce delay in milliseconds (0 = no throttle)."""
+        self._throttle_ms = max(0, int(ms))
+
+    def setLeadingEmit(self, enabled: bool) -> None:
+        """
+        If enabled, emit immediately on first change, then suppress until
+        the debounce window elapses (leading-edge debounce).
+        """
+        self._leading_lock = bool(enabled)
+
+    # --- internal emit helpers ----------------------------------------------
+    def _emit_now(self) -> None:
+        g = self.gradient()
+        if g is not None:
+            self.gradientChanged.emit(g)
+        # release the leading lock at the end of the window
+        if self._leading_lock:
+            # stop ensures the window ends right here if timer was already inactive
+            self._emit_timer.stop()
+
+    @QtCore.Slot()
+    def _emit_changed(self) -> None:
+        """
+        Call this from valueChanged signals in subclasses.
+        Debounces gradientChanged according to _throttle_ms.
+        """
+        if self._throttle_ms <= 0:
+            self._emit_now()
+            return
+
+        if self._leading_lock and not self._emit_timer.isActive():
+            # Leading-edge: fire immediately, then open the window
+            self._emit_now()
+            self._emit_timer.start(self._throttle_ms)
+            return
+
+        # Trailing-edge: coalesce and emit once after quiet period
+        self._emit_timer.start(self._throttle_ms)
+
 
 
 
@@ -20,7 +71,7 @@ class HsvWheelEditor(IGradientEditor):
     """
     gradientChanged = QtCore.Signal(object)  # emits HsvWheelGradient
 
-    def __init__(self, parent=None):
+    def __init__(self,parent=None):
         super().__init__(parent)
 
         # Stored geometry (non-editable here)
@@ -84,16 +135,6 @@ class HsvWheelEditor(IGradientEditor):
             value=int(self._value.value()),
             alpha=int(self._alpha.value()),
         )
-
-    # --- Internals
-
-    @QtCore.Slot()
-    def _emit_changed(self) -> None:
-        g = self.gradient()
-        if g is not None:
-            self.gradientChanged.emit(g)
-
-
 
 
 class HsvSquareEditor(IGradientEditor):
@@ -169,10 +210,4 @@ class HsvSquareEditor(IGradientEditor):
             alpha=int(self._alpha.value()),
         )
 
-    # --- Internals
 
-    @QtCore.Slot()
-    def _emit_changed(self) -> None:
-        g = self.gradient()
-        if g is not None:
-            self.gradientChanged.emit(g)

@@ -1,10 +1,5 @@
-from .gradients import Gradient, HsvWheelGradient, HsvSquareGradient
-from .splines import Spline, CatmullRomSpline
+# Easiest way to populate all registries
+from .gradients import *
+from .point_editors import *
+from .registries import *
 
-gradient_registry = {
-    "HSV Wheel": HsvWheelGradient,
-    "HSV Square": HsvSquareGradient
-}
-spline_registry = {
-    "Catmull Rom": CatmullRomSpline,
-}

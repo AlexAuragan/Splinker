@@ -26,4 +26,5 @@ class Bar(QtWidgets.QToolBar):
 
     @QtCore.Slot()
     def _reset_overlay(self):
-        self.overlay.spline.clear()
+        self.overlay.layer.clear()
+        self.overlay.update()

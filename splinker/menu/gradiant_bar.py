@@ -1,5 +1,6 @@
 from PySide6 import QtWidgets, QtCore, QtGui
 
+from splinker.core import Point
 from splinker.widgets import Overlay
 
 
@@ -14,7 +15,7 @@ class PaletteGradientBar(QtWidgets.QWidget):
         self._overlay.overlaysChanged.connect(self.update)
 
 
-    def _poly_length_positions(self, pts: list[QtCore.QPointF], closed: bool, /) -> list[float]:
+    def _poly_length_positions(self, pts: list[Point], closed: bool, /) -> list[float]:
         """
         Cumulative positions along the control polyline, normalized to [0,1].
         If closed, includes closing edge.
@@ -28,16 +29,16 @@ class PaletteGradientBar(QtWidgets.QWidget):
         lens: list[float] = [0.0]
         total = 0.0
         for i in range(n - 1):
-            dx = float(pts[i + 1].x() - pts[i].x())
-            dy = float(pts[i + 1].y() - pts[i].y())
+            dx = float(pts[i + 1][0] - pts[i][0])
+            dy = float(pts[i + 1][1]  - pts[i][1])
             d = (dx*dx + dy*dy) ** 0.5
             total += d
             lens.append(total)
 
         # Close if needed
         if closed and n >= 2:
-            dx = float(pts[0].x() - pts[-1].x())
-            dy = float(pts[0].y() - pts[-1].y())
+            dx = float(pts[0][0]  - pts[-1][0])
+            dy = float(pts[0][1] - pts[-1][1])
             total += (dx*dx + dy*dy) ** 0.5
 
         if total <= 0.0:
@@ -48,67 +49,50 @@ class PaletteGradientBar(QtWidgets.QWidget):
     def _collect_stops(self, /):
         """
         Returns (stops: list[(pos:float, QColor)], has_data: bool).
-        Falls back to uniform spacing if lengths degenerate.
+        Uses the active path editor's interpolate() to sample the path and
+        colors the samples via the gradient widget.
         """
-        if self._overlay.spline is None:
+        layer = self._overlay.layer
+        if layer is None:
             return [], False
 
-        # points (list) and colors (list[QColor|None])
-        pts_get = getattr(self._overlay.spline, "points", None)
-        pts = pts_get() if callable(pts_get) else getattr(self._overlay.spline, "_points", None)
-        pts = pts or []
-
-        col_get = getattr(self._overlay.spline, "point_colors", None)
-        if callable(col_get):
-            try:
-                cols = col_get()
-            except Exception:
-                cols = None
-        else:
-            cols = None
-
-        # if missing, compute colors via gradient sampling when possible
-        if cols is None:
-            cols = []
-            grad = getattr(self._overlay.spline, "_gradient", None)
-            sampler = getattr(grad, "color_at", None) if grad is not None else None
-            if callable(sampler):
-                for p in pts:
-                    cols.append(sampler(p))
-            else:
-                # give up -> no data
-                return [], False
-
-        # filter invalid colors but keep positions aligned
-        ok_idx = [i for i, c in enumerate(cols) if isinstance(c, QtGui.QColor) and c.isValid()]
-        if not ok_idx:
+        path = layer._path
+        pts = path.points
+        if not pts:
             return [], False
 
-        closed = bool(getattr(self._overlay.spline, "_closed", False))
-        pos = self._poly_length_positions(pts, closed) if len(pts) >= 2 else [0.0]
+        # 1) sample along the *actual path* (editor-aware)
+        #    keep it modest to avoid hundreds of stops in a tiny bar
+        SAMPLES = 64
+        samples = path.editor.interpolate(pts, path.closed, n=SAMPLES)
+        if not samples or len(samples) < 2:
+            return [], False
 
-        # if lengths failed, fall back to uniform
-        if len(pos) != len(pts) or (len(pts) >= 2 and all(abs(p) < 1e-9 for p in pos[1:])):
-            pos = [i / max(1, (len(pts) - 1)) for i in range(len(pts))]
+        # 2) color the samples with the current gradient widget
+        gw = self._overlay.gradient
+        if gw is None:
+            return [], False
+        cols = gw.colors_for_points(samples)
+        if not cols or len(cols) != len(samples):
+            return [], False
 
+        # 3) build gradient stops (uniform by sample index -> [0..1])
         stops: list[tuple[float, QtGui.QColor]] = []
-        for i in ok_idx:
-            p = 0.0 if i >= len(pos) else float(pos[i])
-            stops.append((p, cols[i]))
+        N = len(samples)
+        for i in range(N):
+            c = cols[i]
+            if isinstance(c, QtGui.QColor) and c.isValid():
+                t = i / (N - 1)
+                stops.append((t, c))
 
-        # if closed and first/last positions far apart, optionally add wrap stop
-        if closed and len(stops) >= 2:
-            p0, c0 = stops[0]
-            pN, cN = stops[-1]
-            if pN < 1.0:
-                stops.append((1.0, cN))
-            if p0 > 0.0:
-                stops.insert(0, (0.0, c0))
+        # make sure we have at least 2 valid stops
+        if len(stops) < 2:
+            return [], False
 
-        # clamp/sort
-        stops = [(0.0 if s < 0.0 else (1.0 if s > 1.0 else s), c) for s, c in stops]
+        # clamp/sort just in case (Qt expects non-decreasing positions)
         stops.sort(key=lambda t: t[0])
         return stops, True
+
 
     def paintEvent(self, _event):
         p = QtGui.QPainter(self)

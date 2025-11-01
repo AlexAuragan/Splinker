@@ -1,93 +1,47 @@
-from PySide6 import QtCore, QtGui, QtWidgets
+from typing import override
 
+from PySide6 import QtCore, QtGui, QtWidgets
 from splinker.widgets.gradients_overlay import GradientOverlayWidget
-from splinker.core.splines import Spline, CatmullRomSpline
+from splinker.core.path import Path
+from splinker.core.point_editors import CatmullRomSplinePE
+from splinker.widgets.utils import point_to_qpoint
 
 
 class SplineOverlayWidget(QtWidgets.QWidget):
-    """
-    Transparent overlay that edits and draws a path on top of a GradientWidget.
-
-    A single widget class that delegates spline computation to an injected
-    `Spline` (from splinker.splines). Everything else (point management,
-    gestures, constraints, painting) remains here.
-    """
-
     pointsChanged = QtCore.Signal()
 
-    def __init__(self, gradient: GradientOverlayWidget, spline_type: Spline | None = None, parent=None):
+    def __init__(self, gradient: GradientOverlayWidget, parent=None):
         super().__init__(parent or gradient.parent())
         self._gradient = gradient
-        self._spline = spline_type or CatmullRomSpline()
-
-        self._points: list[QtCore.QPointF] = []
+        self._path = Path(editor=CatmullRomSplinePE())
         self._drag_index: int | None = None
         self._hit_radius = 8.0
-        self._closed = False
         self._active = True
 
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setMouseTracking(True)
-
         self.raise_()
         self._sync_geometry()
         self._gradient.installEventFilter(self)
 
-    # ----- activation API ----------------------------------------------------
-    def is_active(self, /) -> bool:
-        return self._active
 
-    def is_closed(self):
-        return self._closed
-
-    def deactivate(self, /):
-        """
-        Make the overlay non-interactive and half transparent.
-        Mouse events pass through to widgets below.
-        """
-        if not self._active:
-            return
-        self._active = False
-        self._drag_index = None
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
-        self.update()
-
-    def activate(self, /):
-        """
-        Reactivate editing and restore full opacity.
-        """
-        if self._active:
-            return
-        self._active = True
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
-        self.update()
-
-    # ----- public API --------------------------------------------------------
+    # ---- convenience accessors ---------------------------------------------
     @property
     def points(self):
-        return self._points
+        return self._path.points
 
-    def update(self, /):
-        QtWidgets.QWidget.update(self)
+    def clear(self):
+        self._path.clear()
+
+    def point_colors(self):
+        return self._gradient.colors_for_points(self._path.points)
+
+    # ---- Qt plumbing --------------------------------------------------------
+    @override
+    def update(self):
         self._emit_points_changed()
+        super().update()
 
-    def is_closed(self, /) -> bool:
-        return self._closed
-
-    def set_closed(self, closed: bool, /):
-        if self._closed != closed:
-            self._closed = closed
-            self.update()
-
-    def clear(self, /):
-        self._points.clear()
-        self._closed = False
-        self._drag_index = None
-        self.update()
-
-    # ----- plumbing ----------------------------------------------------------
     def _sync_geometry(self):
         self.setParent(self._gradient.parent())
         self.setGeometry(self._gradient.geometry())
@@ -104,67 +58,56 @@ class SplineOverlayWidget(QtWidgets.QWidget):
                 self.hide()
         return super().eventFilter(obj, event)
 
-    # ----- interaction helpers ----------------------------------------------
-    def _dist2(self, a: QtCore.QPointF, b: QtCore.QPointF, /) -> float:
+    # ---- mouse helpers ------------------------------------------------------
+    def _dist2(self, a: QtCore.QPointF, b: QtCore.QPointF) -> float:
         dx = float(a.x() - b.x())
         dy = float(a.y() - b.y())
         return dx * dx + dy * dy
 
     def _index_at(self, pos: QtCore.QPointF) -> int | None:
-        r2 = self._hit_radius * self._hit_radius
-        for i, p in enumerate(self._points):
-            if self._dist2(p, pos) <= r2:
+        r2 = self._hit_radius ** 2
+        for i, p in enumerate(self._path.points):
+            if self._dist2(point_to_qpoint(p), pos) <= r2:
                 return i
         return None
-
-    def _near_endpoint(self, pos: QtCore.QPointF, /) -> int | None:
-        if len(self._points) < 1:
-            return None
-        r2 = (self._hit_radius * 1.5) ** 2
-        if self._dist2(pos, self._points[0]) <= r2:
-            return 0
-        if len(self._points) >= 2 and self._dist2(pos, self._points[-1]) <= r2:
-            return -1
-        return None
-
-    def _ensure_closed_valid(self, /):
-        if self._closed and len(self._points) < 3:
-            self._closed = False
-
-    def _maybe_close_path(self, pos: QtCore.QPointF, /) -> bool:
-        if self._closed or len(self._points) < 3:
-            return False
-        hit = self._near_endpoint(pos)
-        if hit is None:
-            return False
-
-        self._closed = True
-        self.update()
-        return True
 
     def _constrain_to_gradient(self, pos: QtCore.QPointF) -> QtCore.QPointF | None:
         return pos if self._gradient.contains_point(pos) else None
 
-    # ----- mouse events ------------------------------------------------------
+    # ---- mouse events -------------------------------------------------------
+    def _can_close_now(self) -> bool:
+        return (not self._path.closed) and (len(self._path.points) >= 3)
+
     def mousePressEvent(self, e: QtGui.QMouseEvent):
         if not self._active:
             return
         pos = QtCore.QPointF(e.position())
-
-        if e.button() == QtCore.Qt.MouseButton.LeftButton and self._maybe_close_path(pos):
-            return
-
-        is_remove = (e.button() == QtCore.Qt.MouseButton.RightButton) or \
-                    (e.button() == QtCore.Qt.MouseButton.LeftButton and e.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
-
         idx = self._index_at(pos)
 
-        if is_remove:
-            if idx is not None:
-                self._points.pop(idx)
-                self._drag_index = None
-                self._ensure_closed_valid()
-                self.update()
+        # --- close on clicking the first point ---------------------------------
+        if (
+                e.button() == QtCore.Qt.MouseButton.LeftButton
+                and idx == 0
+                and self._can_close_now()
+        ):
+            self._path.closed = True
+            self._drag_index = None
+            self.update()
+            return
+        # -----------------------------------------------------------------------
+
+        is_remove = (
+                e.button() == QtCore.Qt.MouseButton.RightButton
+                or (
+                    e.button() == QtCore.Qt.MouseButton.LeftButton
+                    and e.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
+                )
+        )
+
+        if is_remove and idx is not None:
+            self._path = self._path.remove_point(idx)
+            self._drag_index = None
+            self.update()
             return
 
         if e.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -173,14 +116,22 @@ class SplineOverlayWidget(QtWidgets.QWidget):
             else:
                 inside = self._constrain_to_gradient(pos)
                 if inside is not None:
-                    if self._closed and len(self._points) >= 3:
-                        if self.insert_point_convex(inside):
-                            self._drag_index = None
-                            self.update()
-                            return
-                    self._points.append(inside)
-                    self._drag_index = len(self._points) - 1
-                    self._ensure_closed_valid()
+                    # remember old state to recover the inserted index
+                    old_closed = self._path.closed
+                    old_len = len(self._path.points)
+                    new_pt = (inside.x(), inside.y())
+
+                    self._path = self._path.add_point(new_pt)
+
+                    # if open: append => last index; if closed: find actual inserted slot
+                    if old_closed and len(self._path.points) == old_len + 1:
+                        try:
+                            self._drag_index = self._path.points.index(new_pt)
+                        except ValueError:
+                            self._drag_index = len(self._path.points) - 1
+                    else:
+                        self._drag_index = len(self._path.points) - 1
+
                     self.update()
 
     def mouseMoveEvent(self, e: QtGui.QMouseEvent):
@@ -193,7 +144,7 @@ class SplineOverlayWidget(QtWidgets.QWidget):
         pos = QtCore.QPointF(e.position())
         inside = self._constrain_to_gradient(pos)
         if inside is not None:
-            self._points[self._drag_index] = inside
+            self._path = self._path.edit_point(self._drag_index, (inside.x(), inside.y()))
             self.update()
 
     def mouseReleaseEvent(self, e: QtGui.QMouseEvent):
@@ -202,20 +153,13 @@ class SplineOverlayWidget(QtWidgets.QWidget):
         if e.button() == QtCore.Qt.MouseButton.LeftButton:
             self._drag_index = None
 
-    def _make_path(self, pts: list[QtCore.QPointF], closed: bool, /) -> QtGui.QPainterPath:
-        n = len(pts)
-        if n == 0:
-            return QtGui.QPainterPath()
-
-        # Convert to tuples for backend
-        as_tuples = [(float(p.x()), float(p.y())) for p in pts]
-        ops = list(self._spline.path_ops(as_tuples, closed))
-
-        # Adapt ops -> QPainterPath
-        def qpf(t): return QtCore.QPointF(t[0], t[1])
-
-        # Find initial move
+    # ---- painting -----------------------------------------------------------
+    def _make_path(self) -> QtGui.QPainterPath:
+        pts = self._path.points
+        closed = self._path.closed
+        ops = self._path.editor.path_ops(pts, closed)
         path = QtGui.QPainterPath()
+        qpf = lambda t: QtCore.QPointF(t[0], t[1])
         for op, data in ops:
             if op == "M":
                 path.moveTo(qpf(data))
@@ -228,79 +172,40 @@ class SplineOverlayWidget(QtWidgets.QWidget):
                 path.closeSubpath()
         return path
 
-    # ----- painting ----------------------------------------------------------
-    def paintEvent(self, _event):
-        if not self._points:
+    def paintEvent(self, _):
+        if not self._path.points:
             return
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-
-        # Half transparency when inactive
         if not self._active:
             p.setOpacity(0.5)
 
-        path = self._make_path(self._points, self._closed)
-        pen = QtGui.QPen(QtGui.QColor(0, 0, 0, 160), 2.0,
-                         QtCore.Qt.PenStyle.SolidLine,
-                         QtCore.Qt.PenCapStyle.RoundCap,
-                         QtCore.Qt.PenJoinStyle.RoundJoin)
+        path = self._make_path()
+        pen = QtGui.QPen(QtGui.QColor(0, 0, 0, 160), 2.0)
         p.setPen(pen)
         p.drawPath(path)
 
-        if len(self._points) >= 2:
+        # optional control lines
+        if len(self._path.points) >= 2:
             p.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, 60), 1.0, QtCore.Qt.PenStyle.DashLine))
-            for i in range(len(self._points) - 1):
-                p.drawLine(self._points[i], self._points[i + 1])
-            if self._closed:
-                p.drawLine(self._points[-1], self._points[0])
-
+            for i in range(len(self._path.points) - 1):
+                p.drawLine(
+                    point_to_qpoint(self._path.points[i]),
+                    point_to_qpoint(self._path.points[i + 1])
+                )
+            if self._path.closed:
+                p.drawLine(
+                    point_to_qpoint(self._path.points[-1]),
+                    point_to_qpoint(self._path.points[0])
+                )
         p.setBrush(QtGui.QColor(255, 255, 255, 230))
         p.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, 200), 1.0))
         r = self._hit_radius
-        for pt in self._points:
-            p.drawEllipse(QtCore.QRectF(pt.x() - r * 0.5, pt.y() - r * 0.5, r, r))
+        for pt in self._path.points:
+            p.drawEllipse(QtCore.QRectF(pt[0] - r * 0.5, pt[1] - r * 0.5, r, r))
 
         p.end()
 
-    def insert_point_convex(self, p: QtCore.QPointF, /) -> bool:
-        """
-        Delegate to backend; preserves widget behavior (mutates self._points).
-        """
-        if not self._closed or len(self._points) < 3:
-            return False
-
-        as_tuples = [(float(t.x()), float(t.y())) for t in self._points]
-        new_pts, ok = self._spline.insert_point_convex(as_tuples, (float(p.x()), float(p.y())), True)
-        if not ok:
-            return False
-
-        # apply mutation in-place
-        self._points[:] = [QtCore.QPointF(x, y) for (x, y) in new_pts]
-        return True
-
-    # ----- color sampling helpers (unchanged) --------------------------------
-    def point_to_color(self, pt: QtCore.QPointF, /) -> QtGui.QColor | None:
-        if not self._gradient.contains_point(pt):
-            return None
-        return self._gradient.color_at(pt)
-
-    def point_colors(self, /) -> list[QtGui.QColor | None]:
-        out: list[QtGui.QColor | None] = []
-        for p in self._points:
-            out.append(self.point_to_color(p))
-        return out
-
-    def move_point_to_color(self, index: int, color: QtGui.QColor, /) -> bool:
-        if index < 0 or index >= len(self._points):
-            return False
-        pt = self._gradient.point_for_color(color)
-        if pt is None or not self._gradient.contains_point(pt):
-            return False
-        self._points[index] = QtCore.QPointF(pt)
-        self.update()
-        return True
-
-    # ----- Signals -----------------------------------------------------------
-    def _emit_points_changed(self, /):
+    # ---- signals ------------------------------------------------------------
+    def _emit_points_changed(self):
         self.pointsChanged.emit()
-
