@@ -16,7 +16,7 @@ You need to have python, install the required packages and run main.py
 
 # Roadmap
 
- * [ ] Have a python API for the color manipulation parts 
+ * [x] Have a python API for the color manipulation parts 
  * [x] Preview of the color palette
    * [x] Simple gradient preview
    * [ ] Preview on some PNG

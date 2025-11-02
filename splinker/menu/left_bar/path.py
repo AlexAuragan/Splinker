@@ -40,8 +40,7 @@ class PathTab(QtWidgets.QWidget):
         lay.addWidget(self._editor_box)
 
         self._list.currentRowChanged.connect(self._on_row_changed)
-        self.layerSelected.connect(self._apply_selection_to_manager)
-        self.layerSelected.connect(self._refresh_editor_from_active)   # <- new
+        self.layerSelected.connect(self._refresh_editor_from_active)
         self._overlay.layerNameChanged.connect(self._on_layer_name_changed)
 
         self._rebuild_from_manager()
@@ -55,7 +54,7 @@ class PathTab(QtWidgets.QWidget):
         # Build rows using small overlay-like shims exposing `.spline`
         self._list.clear()
         for i in range(len(self._overlay)):
-            name = self._overlay.layer_name_at(i)
+            name = self._overlay[i].name
             self.add_overlay(self._overlay, name)
 
         # select active row
@@ -122,28 +121,17 @@ class PathTab(QtWidgets.QWidget):
         if isinstance(w, LayerItem):
             self.layerSelected.emit(w)
 
-    def _emit_activate(self, overlay):
-        self.layerSelected.emit(overlay)
+    def _emit_activate(self, layer: LayerItem):
+        assert isinstance(layer, LayerItem)
+        self.layerSelected.emit(layer)
 
-    def _apply_selection_to_manager(self, overlay):
-        """Called when the user clicks/selects an overlay in the list."""
-        if self._overlay is None or overlay is None:
-            return
-        try:
-            cnt = len(self._overlay)
-            for i in range(cnt):
-                if self._overlay.spline_at(i) is overlay.layer:
-                    self._overlay.set_active_layer(i)
-                    return
-        except Exception:
-            return
 
     def _on_layer_name_changed(self, idx: int):
         if 0 <= idx < self._list.count():
             item = self._list.item(idx)
             w = self._list.itemWidget(item)
             if isinstance(w, LayerItem):
-                w.setName(self._overlay.layer_name_at(idx))
+                w.setName(self._overlay[idx].name)
 
     # ---- editor wiring (new) ------------------------------------------------
 
@@ -167,23 +155,18 @@ class PathTab(QtWidgets.QWidget):
         Swap in the proper editor for the active layer's gradient,
         and push the current gradient into the editor.
         """
-        try:
-            grad_widget = self._overlay.gradient  # GradientOverlayWidget
-        except Exception:
-            self._clear_editor()
-            return
-        if grad_widget is None:
-            self._clear_editor()
-            return
 
-        pure_grad: CoreGradient | None = getattr(grad_widget, "gradient", None)
+        layer_widget = self._overlay.active_layer  # LayerOverlayWidget
+        pure_grad = layer_widget.gradient  # This is already a Gradient
+
         if pure_grad is None:
             self._clear_editor()
             return
 
-        # Find a factory for this gradient type (exact match first)
+        # Find a factory for this gradient type
         g_cls = type(pure_grad)
         factory: EditorFactory | None = editor_registry.get(g_cls)
+
         if factory is None:
             # no editor registered → show placeholder
             self._clear_editor()
@@ -192,16 +175,22 @@ class PathTab(QtWidgets.QWidget):
         # Create or reuse the editor if type matches
         ed = self._editor_widget
         if ed is None or type(ed) is not type(factory()):
-            # replace editor widget
-            self._clear_editor()
+            # Remove old widget(s) without adding placeholder
+            while self._editor_lay.count():
+                it = self._editor_lay.takeAt(0)
+                w = it.widget()
+                if w is not None:
+                    w.setParent(None)
+                    w.deleteLater()
+
+            # Create new editor
             ed = factory()
-            # when user changes params in editor, apply back to the gradient overlay
             ed.gradientChanged.connect(self._apply_editor_gradient_to_active)
             self._editor_lay.addWidget(ed)
             self._editor_widget = ed
             self._editor_type = type(ed)
 
-        # load current gradient into the editor (won't emit if your editor blocks signals)
+        # load current gradient into the editor
         if ed is not None:
             ed.setGradient(pure_grad)
 
@@ -210,17 +199,11 @@ class PathTab(QtWidgets.QWidget):
         """
         Apply the edited pure gradient back into the active GradientOverlayWidget.
         """
-        try:
-            grad_widget = self._overlay.gradient  # GradientOverlayWidget
-        except Exception:
+        layer_widget = self._overlay.active_layer
+        if layer_widget is None or new_grad is None:
             return
-        if grad_widget is None or new_grad is None:
-            return
-        try:
-            # GradientOverlayWidget exposes set_gradient(...)
-            grad_widget.set_gradient(new_grad)
-            grad_widget.update()
-            idx = self._overlay.get_active_idx()
-            self._overlay.overlayUpdated.emit(idx)
-        except Exception:
-            pass
+
+        layer_widget.set_gradient(new_grad)
+        layer_widget.update()
+        idx = self._overlay.get_active_idx()
+        self._overlay.overlayUpdated.emit(idx)

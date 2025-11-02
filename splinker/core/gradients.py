@@ -1,27 +1,9 @@
 import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from splinker.core.registries import register_gradient
-
-
-@dataclass(frozen=True)
-class HSVa:
-    """
-    Pure-theory color container (HSV + alpha), using the same integer ranges
-    as Qt for easy bridging:
-      - h: 0..359, or -1 if undefined (achromatic)
-      - s, v, a: 0..255
-    """
-    h: int   # 0..359, or -1
-    s: int   # 0..255
-    v: int   # 0..255
-    a: int   # 0..255
-
-    def get_hsva(self, /) -> Tuple[int, int, int, int]:
-        return self.h, self.s, self.v, self.a
-
+from .math import HSVa, Point
+from .registries import register_gradient
 
 class Gradient(ABC):
     """
@@ -44,8 +26,14 @@ class Gradient(ABC):
         pass
 
     @abstractmethod
-    def point_for_color(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
+    def point_at(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
         pass
+
+    def colors_to_point(self, colors: list[HSVa]):
+        return [self.point_at(color) for color in colors]
+
+    def points_to_colors(self, points: list[Point]):
+        return [self.color_at(point[0], point[1]) for point in points]
 
 @register_gradient("HSV Wheel")
 class HsvWheelGradient(Gradient):
@@ -99,11 +87,11 @@ class HsvWheelGradient(Gradient):
 
     # --- Inverse mapping: HSVa -> (x, y)
 
-    def point_for_color(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
+    def point_at(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
         if self.R <= 0.0:
             return None
 
-        h, s, v, a = color.get_hsva()
+        h, s, v, a = color.to_hsva()
 
         # Only colors that lie on this wheel (fixed V and A) are representable
         if v != self.value or a != self.alpha:
@@ -182,11 +170,11 @@ class HsvSquareGradient(Gradient):
         return HSVa(h=self.hue, s=s, v=v, a=self.alpha)
 
     # --- inverse: HSVa -> (x, y)
-    def point_for_color(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
+    def point_at(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
         if self.S <= 0.0:
             return None
 
-        h, s, v, a = color.get_hsva()
+        h, s, v, a = color.to_hsva()
 
         if h != self.hue or a != self.alpha:
             return None

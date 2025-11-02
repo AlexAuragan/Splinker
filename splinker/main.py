@@ -2,7 +2,7 @@ import sys
 
 from PySide6 import QtCore, QtWidgets
 
-from menu.bar import Bar
+from splinker.menu.top_bar.bar import Bar
 from splinker.menu.left_bar import MenuBar, PaletteGradientBar
 from widgets import Overlay
 
@@ -27,7 +27,7 @@ class MyWidget(QtWidgets.QWidget):
         self.layout.addLayout(self.main_layout)
 
         self.overlay.overlayUpdated.connect(self.menu_bar.refresh)
-        self.overlay.layer.pointsChanged.connect(self.menu_bar.refresh)
+        self.overlay.active_layer.pointsChanged.connect(self.menu_bar.refresh)
 
 
 

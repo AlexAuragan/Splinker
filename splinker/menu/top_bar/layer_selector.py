@@ -1,6 +1,8 @@
 from PySide6 import QtWidgets, QtCore
 
+from splinker.core.layer import Layer
 from splinker.widgets import Overlay
+from splinker.widgets.layer_overlay import LayerOverlayWidget
 
 
 class LayerSwitchWidget(QtWidgets.QWidget):
@@ -23,11 +25,11 @@ class LayerSwitchWidget(QtWidgets.QWidget):
 
         # populate based on current overlays (prefer real names)
         for i in range(len(self._overlay)):
-            name = self._overlay.layer_name_at(i)
+            name = self._overlay[i].name
             self._select.addItem(name)
 
         # if manager already has an active index, prefer it
-        idx0 = getattr(self._overlay, "_active_idx", 0)
+        idx0 = self._overlay.get_active_idx()
         self._select.setCurrentIndex(idx0 if 0 <= idx0 < self._select.count() else 0)
 
         self._btn_new.clicked.connect(self._on_new)
@@ -40,7 +42,8 @@ class LayerSwitchWidget(QtWidgets.QWidget):
 
     @QtCore.Slot()
     def _on_new(self):
-        idx = self._overlay.add_overlay()
+        idx = len(self._overlay)
+        idx = self._overlay.add_layer(LayerOverlayWidget(Layer(name=f"Layer {idx+1}")))
         self._select.setCurrentIndex(idx)  # triggers switch via _on_select_changed
 
     @QtCore.Slot(int)
@@ -55,7 +58,7 @@ class LayerSwitchWidget(QtWidgets.QWidget):
         self._select.blockSignals(True)
         self._select.clear()
         for i in range(len(self._overlay)):
-            name = self._overlay.layer_name_at(i) or f"Overlay {i + 1}"
+            name = self._overlay[i].name or f"Overlay {i + 1}"
             self._select.addItem(name)
         if 0 <= cur < self._select.count():
             self._select.setCurrentIndex(cur)
@@ -73,5 +76,5 @@ class LayerSwitchWidget(QtWidgets.QWidget):
     @QtCore.Slot(int)
     def _on_name_changed(self, idx: int):
         if 0 <= idx < self._select.count():
-            name = getattr(self._overlay, "layer_name_at", lambda _i: None)(idx) or f"Overlay {idx + 1}"
+            name = self._overlay[idx].name
             self._select.setItemText(idx, name)

@@ -52,11 +52,11 @@ class PaletteGradientBar(QtWidgets.QWidget):
         Uses the active path editor's interpolate() to sample the path and
         colors the samples via the gradient widget.
         """
-        layer = self._overlay.layer
-        if layer is None:
+        layer_widget = self._overlay.active_layer
+        if layer_widget is None:
             return [], False
 
-        path = layer._path
+        path = layer_widget.path
         pts = path.points
         if not pts:
             return [], False
@@ -69,10 +69,9 @@ class PaletteGradientBar(QtWidgets.QWidget):
             return [], False
 
         # 2) color the samples with the current gradient widget
-        gw = self._overlay.gradient
-        if gw is None:
+        if layer_widget is None:
             return [], False
-        cols = gw.colors_for_points(samples)
+        cols = layer_widget.gradient.points_to_colors(samples)
         if not cols or len(cols) != len(samples):
             return [], False
 

@@ -1,14 +1,10 @@
 from PySide6 import QtWidgets, QtCore
-
-from splinker.core.gradients import HsvWheelGradient, HsvSquareGradient
-from splinker.widgets.gradients_overlay import GradientOverlayWidget
-from splinker.widgets.spline_overlay import SplineOverlayWidget
+from splinker.widgets.layer_overlay import LayerOverlayWidget
 
 
 class Overlay(QtWidgets.QWidget):
     """
-    Manages one or more (GradientOverlayWidget + SplineOverlayWidget) pairs and
-    only displays the active one.
+    Manages one or more Layers and only displays the active one.
     """
 
     overlaysChanged = QtCore.Signal()          # emitted when overlays are added/removed
@@ -17,79 +13,64 @@ class Overlay(QtWidgets.QWidget):
     layerNameChanged = QtCore.Signal(int)      # emitted when a layer's name changes (arg = index)
 
     def __init__(self,
-                 gradient: GradientOverlayWidget | None = None,
-                 spline: SplineOverlayWidget | None = None,
+                 layer: LayerOverlayWidget | None = None,
                  parent=None
                  ):
         super().__init__(parent)
 
         self._stack = QtWidgets.QStackedLayout(self)
-
-        # self._stack.setStackingMode(QtWidgets.QStackedLayout.StackingMode.StackAll)
         self._stack.setStackingMode(QtWidgets.QStackedLayout.StackingMode.StackOne)
 
-        self._gradients: list[GradientOverlayWidget] = []
-        self._layer: list[SplineOverlayWidget] = []
-        self._names: list[str] = []
+        self._layers: list[LayerOverlayWidget] = []
         self._active_idx = -1
 
-        self.add_overlay(gradient, spline)
+        self.add_layer(layer)
         self.set_active_layer(0)
 
-    # --- public API (kept compatible via properties) -------------------------
-
+    # --- public API -------------------------
     @property
-    def gradient(self):
-        # active gradient
-        return self._gradients[self._active_idx]
-
-    @property
-    def layer(self) -> SplineOverlayWidget:
-        # active layer
-        return self._layer[self._active_idx]
+    def active_layer(self) -> LayerOverlayWidget:
+        return self._layers[self._active_idx]
 
     def get_active_idx(self):
         return self._active_idx
 
-    # --- naming helpers ------------------------------------------------
-
     def set_layer_name(self, index: int, name: str) -> None:
         """Set the display name for a layer and notify listeners."""
-        if 0 <= index < len(self._names):
+        if 0 <= index < len(self._layers):
             nm = name if isinstance(name, str) else ""
-            if self._names[index] != nm:
-                self._names[index] = nm
+            if self._layers[index].name != nm:
+                self._layers[index].set_name(nm)
                 self.layerNameChanged.emit(index)
 
-    def layer_name_at(self, index: int) -> str | None:
-        """Return the display name for a layer, or None if out of range."""
-        if 0 <= index < len(self._names):
-            return self._names[index]
-        return None
+    def remove_layer(self, index: int) -> bool:
+        """Remove layer at index. Returns True if successful."""
+        if not (0 <= index < len(self._layers)):
+            return False
 
-    # --- new helpers for multi-overlay management ----------------------------
+        layer = self._layers.pop(index)
+        self._stack.removeWidget(layer)
+        layer.deleteLater()
 
-    def add_overlay(self,
-                    gradient: GradientOverlayWidget | None = None,
-                    spline: SplineOverlayWidget | None = None) -> int:
+        # Adjust active index if needed
+        if self._active_idx >= len(self._layers):
+            self._active_idx = len(self._layers) - 1
+
+        self.overlaysChanged.emit()
+        if self._active_idx >= 0:
+            self.activeLayerChanged.emit(self._active_idx)
+
+        return True
+
+    def add_layer(self, layer: LayerOverlayWidget | None) -> int:
         # grad = gradient or GradientOverlayWidget(HsvWheelGradient(300, 300, 298))
-        grad = gradient or GradientOverlayWidget(HsvSquareGradient(300, 300, 298, hue=0))
-        spl = spline or SplineOverlayWidget(grad)
+        layer = layer or LayerOverlayWidget()
 
-        # each overlay is a small stacked container of gradient + spline
-        container = QtWidgets.QWidget(self)
-        lay = QtWidgets.QStackedLayout(container)
-        lay.setStackingMode(QtWidgets.QStackedLayout.StackingMode.StackAll)
-        lay.addWidget(grad)
-        lay.addWidget(spl)
+        idx = len(self._layers)
+        self._layers.append(layer)
+        self._stack.addWidget(layer)
 
-        idx = len(self._gradients)
-        self._gradients.append(grad)
-        self._layer.append(spl)
-        self._names.append(f"Layer {idx + 1}")
-        self._stack.addWidget(container)
-
-        spl.pointsChanged.connect(lambda i=idx: self.overlayUpdated.emit(i))
+        layer.pointsChanged.connect(lambda i=idx: self.overlayUpdated.emit(i))
         self.overlaysChanged.emit()
         self.overlayUpdated.emit(idx)
         return idx
@@ -103,28 +84,34 @@ class Overlay(QtWidgets.QWidget):
     def count(self) -> int:
         return self._stack.count()
 
-    def spline_at(self, index: int) -> SplineOverlayWidget | None:
-        if 0 <= index < len(self._layer):
-            return self._layer[index]
-        return None
+    def duplicate_layer(self, index: int | str):
+        original = self[index]
 
-    def __getitem__(self, key):
+        # Create new layer with copied data
+        from splinker.core.layer import Layer
+        from copy import deepcopy
+
+        new_layer_data = Layer(
+            gradient=original.gradient,  # Gradients are typically immutable
+            path=deepcopy(original.path),  # Deep copy the path
+            name=f"{original.name} Copy"
+        )
+
+        new_widget = LayerOverlayWidget(new_layer_data)
+        return self.add_layer(new_widget)
+
+    def __getitem__(self, key) -> LayerOverlayWidget:
         """Allow overlay['Layer 1'] or overlay[0] access."""
         if isinstance(key, int):
-            if 0 <= key < len(self._gradients):
-                return type("OverlayEntry", (), {
-                    "gradient": self._gradients[key],
-                    "layer": self._layer[key],
-                    "name": self._names[key],
-                })()
+            if 0 <= key < len(self._layers):
+                return self._layers[key]
             raise IndexError(key)
         if isinstance(key, str):
-            try:
-                idx = self._names.index(key)
-            except ValueError:
-                raise KeyError(key)
-            return self[idx]
+            for i, layer in enumerate(self._layers):
+                if layer.name == key:
+                    return layer
+            raise KeyError(key)
         raise TypeError("key must be int or str")
 
     def __len__(self):
-        return len(self._gradients)
+        return len(self._layers)
