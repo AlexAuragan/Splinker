@@ -1,6 +1,6 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 
-from . import HSVa
+from . import Color, Point
 from .gradients import Gradient, HsvWheelGradient
 from .path import Path
 
@@ -10,6 +10,33 @@ class Layer:
     gradient: Gradient = field(default_factory=HsvWheelGradient)
     path: Path = field(default_factory=Path)
     name: str = "Overlay"
+
+    # Accessor
+    @property
+    def points(self):
+        return self.path.points
+
+    @property
+    def closed(self):
+        return self.path.closed
+
+    @property
+    def editor(self):
+        return self.path.editor
+
+    @property
+    def path_param(self):
+        return self.path.params
+
+
+    def point_at(self, color: Color):
+        return self.gradient.point_at(color)
+
+    def color_at(self, point: Point):
+        return self.gradient.color_at(point[0], point[1])
+
+    def point_colors(self):
+        return [self.color_at(point) for point in self.points]
 
     def sample(self, n=64):
         """
@@ -34,7 +61,7 @@ class Layer:
             return [], False
 
         # 3) build gradient stops (uniform by sample index -> [0..1])
-        stops: list[tuple[float, HSVa | None]] = []
+        stops: list[tuple[float, Color | None]] = []
         N = len(samples)
         for i in range(N):
             c = cols[i]
@@ -48,3 +75,10 @@ class Layer:
         # clamp/sort just in case (Qt expects non-decreasing positions)
         stops.sort(key=lambda t: t[0])
         return stops, True
+
+    def to_dict(self):
+        return {
+            "gradient": self.gradient.to_dict(),
+            "path": self.path.to_dict(),
+            "name": self.name
+        }

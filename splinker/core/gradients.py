@@ -2,7 +2,7 @@ import math
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
-from .math import HSVa, Point
+from splinker.core.math import Color, Point
 from .registries import register_gradient
 
 class Gradient(ABC):
@@ -22,14 +22,18 @@ class Gradient(ABC):
         pass
 
     @abstractmethod
-    def color_at(self, x: float, y: float, /) -> Optional[HSVa]:
+    def color_at(self, x: float, y: float, /) -> Optional[Color]:
         pass
 
     @abstractmethod
-    def point_at(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
+    def point_at(self, color: Color, /) -> Optional[Tuple[float, float]]:
         pass
 
-    def colors_to_point(self, colors: list[HSVa]):
+    @abstractmethod
+    def to_dict(self) -> dict:
+        pass
+
+    def colors_to_point(self, colors: list[Color]):
         return [self.point_at(color) for color in colors]
 
     def points_to_colors(self, points: list[Point]):
@@ -53,26 +57,35 @@ class HsvWheelGradient(Gradient):
     def __init__(self, cx: float = 300, cy: float = 300, radius: float = 298, /, *, value: int = 255, alpha: int = 255):
         self.cx = float(cx)
         self.cy = float(cy)
-        self.R = float(radius)
+        self.radius = float(radius)
         self.value = int(max(0, min(255, value)))
         self.alpha = int(max(0, min(255, alpha)))
 
+    def to_dict(self) -> dict:
+        return {
+            "cx": self.cx,
+            "cy": self.cy,
+            "radius": self.radius,
+            "value": self.value,
+            "alpha": self.alpha,
+            "_type": "HSV Wheel"
+        }
     # --- Geometry helpers
 
     def contains_point(self, x: float, y: float, /) -> bool:
         dx = x - self.cx
         dy = y - self.cy
-        return (dx * dx + dy * dy) <= (self.R * self.R)
+        return (dx * dx + dy * dy) <= (self.radius * self.radius)
 
     # --- Forward mapping: (x, y) -> HSVa
 
-    def color_at(self, x: float, y: float, /) -> Optional[HSVa]:
-        if self.R <= 0.0:
+    def color_at(self, x: float, y: float, /) -> Optional[Color]:
+        if self.radius <= 0.0:
             return None
         dx = x - self.cx
         dy = y - self.cy
         r = math.hypot(dx, dy)
-        if r > self.R:
+        if r > self.radius:
             return None
 
         # hue in [0, 360), atan2 returns [-pi, pi]
@@ -80,15 +93,15 @@ class HsvWheelGradient(Gradient):
         hue = int((ang_deg + 360.0) % 360.0)
 
         # saturation in [0..255]
-        sat = int(round(255.0 * (r / self.R)))
+        sat = int(round(255.0 * (r / self.radius)))
         sat = max(0, min(255, sat))
 
-        return HSVa(h=hue, s=sat, v=self.value, a=self.alpha)
+        return Color(h=hue, s=sat, v=self.value, a=self.alpha)
 
     # --- Inverse mapping: HSVa -> (x, y)
 
-    def point_at(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
-        if self.R <= 0.0:
+    def point_at(self, color: Color, /) -> Optional[Tuple[float, float]]:
+        if self.radius <= 0.0:
             return None
 
         h, s, v, a = color.to_hsva()
@@ -102,7 +115,7 @@ class HsvWheelGradient(Gradient):
             return None
 
         # Compute radius from saturation
-        r = (s / 255.0) * self.R
+        r = (s / 255.0) * self.radius
 
         # Determine angle. If hue is undefined (achromatic), pick 0° by convention.
         if h is None or h < 0:
@@ -120,13 +133,6 @@ class HsvWheelGradient(Gradient):
 @register_gradient("HSV Square")
 class HsvSquareGradient(Gradient):
     """
-    HSV square for a given hue:
-      - X axis: value/brightness (black → white/color)
-      - Y axis: saturation (white → pure color)
-      - hue: fixed
-      - alpha: fixed
-
-    The square is centered at (cx, cy) with side length S.
     HSV ranges:
       - hue: fixed (0..359)
       - saturation: 0..255 (top→bottom)
@@ -148,6 +154,15 @@ class HsvSquareGradient(Gradient):
         self.x1 = self.cx + half
         self.y1 = self.cy + half
 
+    def to_dict(self) -> dict:
+        return {
+            "cx": self.cx,
+            "cy": self.cy,
+            "S": self.S,
+            "hue": self.hue,
+            "alpha": self.alpha,
+            "_type": "HSV Square"
+        }
     # --- geometry check
     def contains_point(self, x: float, y: float, /) -> bool:
         if self.S <= 0.0:
@@ -155,7 +170,7 @@ class HsvSquareGradient(Gradient):
         return (self.x0 <= x <= self.x1) and (self.y0 <= y <= self.y1)
 
     # --- forward: (x, y) -> HSVa
-    def color_at(self, x: float, y: float, /) -> Optional[HSVa]:
+    def color_at(self, x: float, y: float, /) -> Optional[Color]:
         if self.S <= 0.0 or not self.contains_point(x, y):
             return None
 
@@ -167,10 +182,10 @@ class HsvSquareGradient(Gradient):
         s = int(round(max(0.0, min(1.0, ty)) * 255.0))
         v = int(round(max(0.0, min(1.0, tx)) * 255.0))
 
-        return HSVa(h=self.hue, s=s, v=v, a=self.alpha)
+        return Color(h=self.hue, s=s, v=v, a=self.alpha)
 
     # --- inverse: HSVa -> (x, y)
-    def point_at(self, color: HSVa, /) -> Optional[Tuple[float, float]]:
+    def point_at(self, color: Color, /) -> Optional[Tuple[float, float]]:
         if self.S <= 0.0:
             return None
 

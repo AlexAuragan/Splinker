@@ -110,7 +110,7 @@ class HsvWheelEditor(IGradientEditor):
         # Update geometry we mirror but don't expose for editing
         self._cx = float(grad.cx)
         self._cy = float(grad.cy)
-        self._radius = float(grad.R)
+        self._radius = float(grad.radius)
 
         # Update editable controls without triggering emissions
         try:

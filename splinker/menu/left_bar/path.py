@@ -1,10 +1,10 @@
 from PySide6 import QtWidgets, QtCore
 
 from splinker.menu.left_bar.layer_item import LayerItem
-from splinker.widgets import Overlay
+from splinker.widgets import CanvasWidget
 
 from typing import Type
-from splinker.core.gradients import Gradient as CoreGradient
+from splinker.core.gradients import Gradient
 from splinker.widgets.editors import EditorFactory, IGradientEditor
 from splinker.widgets import editor_registry
 
@@ -15,7 +15,7 @@ class PathTab(QtWidgets.QWidget):
     """
     layerSelected = QtCore.Signal(object)  # emits the selected overlay-like object (must expose `.spline`)
 
-    def __init__(self, overlay: Overlay, parent=None):
+    def __init__(self, overlay: CanvasWidget, parent=None):
         super().__init__(parent)
         self._list = QtWidgets.QListWidget(self)
         self._list.setUniformItemSizes(False)
@@ -42,6 +42,7 @@ class PathTab(QtWidgets.QWidget):
         self._list.currentRowChanged.connect(self._on_row_changed)
         self.layerSelected.connect(self._refresh_editor_from_active)
         self._overlay.layerNameChanged.connect(self._on_layer_name_changed)
+
 
         self._rebuild_from_manager()
 
@@ -83,7 +84,7 @@ class PathTab(QtWidgets.QWidget):
             self._list.setCurrentRow(idx)
 
     # ---- existing API kept --------------------------------------------------
-    def add_overlay(self, overlay: Overlay, name: str = ""):
+    def add_overlay(self, overlay: CanvasWidget, name: str = ""):
         row_widget = LayerItem(overlay, name, self)
         row_widget.requestActivate.connect(self._emit_activate)
 
@@ -188,6 +189,7 @@ class PathTab(QtWidgets.QWidget):
             ed.gradientChanged.connect(self._apply_editor_gradient_to_active)
             self._editor_lay.addWidget(ed)
             self._editor_widget = ed
+            self._editor_widget.gradientChanged.connect(self._overlay.apply_gradient_from_editor)
             self._editor_type = type(ed)
 
         # load current gradient into the editor
@@ -195,15 +197,15 @@ class PathTab(QtWidgets.QWidget):
             ed.setGradient(pure_grad)
 
     @QtCore.Slot(object)
-    def _apply_editor_gradient_to_active(self, new_grad: CoreGradient):
+    def _apply_editor_gradient_to_active(self, new_grad: Gradient):
         """
         Apply the edited pure gradient back into the active GradientOverlayWidget.
         """
-        layer_widget = self._overlay.active_layer
-        if layer_widget is None or new_grad is None:
+        layer = self._overlay.active_layer
+        if layer is None or new_grad is None:
             return
 
-        layer_widget.set_gradient(new_grad)
-        layer_widget.update()
+        layer.gradient = new_grad
+        self._overlay.display.update()
         idx = self._overlay.get_active_idx()
         self._overlay.overlayUpdated.emit(idx)

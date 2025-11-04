@@ -1,11 +1,11 @@
-from dataclasses import dataclass
-from typing import Literal, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from PySide6.QtGui import QColor
+from typing import Literal
 
 Point = tuple[float, float]
 Op = tuple[Literal["M", "L", "C", "Z"], tuple]
+
+def dist2(point1: Point, point2: Point) -> float:
+    return (point1[0] - point2[0])**2 + (point1[1] - point2[1])**2
+
 
 def project_point_to_segment(p: Point, a: Point, b: Point) -> tuple[Point, float]:
     ax, ay = a; bx, by = b; px, py = p
@@ -106,63 +106,3 @@ def sample_cubic_path(pts: list[Point], closed: bool, seg_fn, total: int = 100) 
             sel.append(out[j])
         return sel
     return out
-
-
-
-@dataclass
-class HSVa:
-    """
-    Pure-theory color container (HSV + alpha), using the same integer ranges
-    as Qt for easy bridging:
-      - h: 0..359, or -1 if undefined (achromatic)
-      - s, v, a: 0..255
-    """
-    h: int  # 0..359, or -1
-    s: int  # 0..255
-    v: int  # 0..255
-    a: int  # 0..255
-
-    def to_hsva(self, /) -> tuple[int, int, int, int]:
-        return self.h, self.s, self.v, self.a
-
-    def to_QColor(self) -> "QColor":
-        from PySide6.QtGui import QColor
-        r, g, b = self.to_rgb()
-        return QColor(r, g, b)
-
-    @staticmethod
-    def from_qcolor(qcolor: "QColor") -> "HSVa":
-        return HSVa(qcolor.hue(), qcolor.saturation(), qcolor.value(), qcolor.alpha())
-
-    def isValid(self):
-        return True
-
-    def to_rgb(self) -> tuple[int, int, int]:
-        if self.h == -1:
-            r = g = b = self.v
-            return r, g, b
-
-        h = self.h / 60.0
-        s = self.s / 255.0
-        v = self.v / 255.0
-
-        i = int(h) % 6
-        f = h - i
-        p = v * (1 - s)
-        q = v * (1 - f * s)
-        t = v * (1 - (1 - f) * s)
-
-        if i == 0:
-            r, g, b = v, t, p
-        elif i == 1:
-            r, g, b = q, v, p
-        elif i == 2:
-            r, g, b = p, v, t
-        elif i == 3:
-            r, g, b = p, q, v
-        elif i == 4:
-            r, g, b = t, p, v
-        else:  # i == 5
-            r, g, b = v, p, q
-
-        return int(r * 255), int(g * 255), int(b * 255)

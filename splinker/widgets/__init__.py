@@ -1,14 +1,16 @@
 from typing import Type
 
 from .editors import EditorFactory, HsvWheelEditor, HsvSquareEditor
-from .overlay import Overlay
+from .canvas import CanvasWidget
 from splinker.core.gradients import Gradient, HsvWheelGradient, HsvSquareGradient
+from .layer_display import LayerDisplayComponent
 
 editor_registry: dict[Type[Gradient], EditorFactory] = {
     HsvWheelGradient:  lambda: HsvWheelEditor(),
     HsvSquareGradient: lambda: HsvSquareEditor(),
 }
 __all__ = [
-    "Overlay",
-    "editor_registry"
+    "CanvasWidget",
+    "editor_registry",
+    "LayerDisplayComponent"
 ]

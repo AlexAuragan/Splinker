@@ -2,9 +2,9 @@ import sys
 
 from PySide6 import QtCore, QtWidgets
 
-from splinker.menu.top_bar.bar import Bar
-from splinker.menu.left_bar import MenuBar, PaletteGradientBar
-from widgets import Overlay
+from splinker.core import HsvSquareGradient, CatmullRomSplinePE, Layer, Path, Palette
+from splinker.menu import Bar, MenuBar, PaletteGradientBar
+from splinker.widgets import CanvasWidget, LayerDisplayComponent
 
 class MyWidget(QtWidgets.QWidget):
     def __init__(self):
@@ -13,7 +13,15 @@ class MyWidget(QtWidgets.QWidget):
         self.main_layout = QtWidgets.QHBoxLayout()
         self.layout = QtWidgets.QVBoxLayout(self)
 
-        self.overlay = Overlay()
+        first_palette = Palette(
+            "First Palette",
+            [Layer(
+                gradient=HsvSquareGradient(300, 300, 298, hue=0),
+                path=Path(editor=CatmullRomSplinePE()),
+                name="Layer 1"
+            )]
+        )
+        self.overlay = CanvasWidget(palette=first_palette, parent=self)
 
         self.menu_bar = MenuBar(self.overlay)
         self.top_bar = Bar(self.overlay)
@@ -27,7 +35,7 @@ class MyWidget(QtWidgets.QWidget):
         self.layout.addLayout(self.main_layout)
 
         self.overlay.overlayUpdated.connect(self.menu_bar.refresh)
-        self.overlay.active_layer.pointsChanged.connect(self.menu_bar.refresh)
+        self.overlay.display.pointsChanged.connect(self.menu_bar.refresh)
 
 
 

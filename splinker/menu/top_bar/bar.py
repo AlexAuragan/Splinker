@@ -1,12 +1,12 @@
 from PySide6 import QtCore, QtWidgets
 
-from splinker.widgets import Overlay
+from splinker.widgets import CanvasWidget
 from splinker.menu.top_bar.tools import ToolSelectorWidget
 from splinker.menu.top_bar.layer_selector import LayerSwitchWidget
 
 
 class Bar(QtWidgets.QToolBar):
-    def __init__(self, overlay: Overlay):
+    def __init__(self, overlay: CanvasWidget):
         super().__init__()
 
         self.overlay = overlay

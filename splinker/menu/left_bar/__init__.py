@@ -2,7 +2,7 @@ from PySide6 import QtWidgets, QtCore
 
 from splinker.menu.gradiant_bar import PaletteGradientBar
 from splinker.menu.left_bar.path import PathTab
-from splinker.widgets import Overlay
+from splinker.widgets import CanvasWidget
 
 
 class MenuBar(QtWidgets.QTabWidget):
@@ -14,7 +14,7 @@ class MenuBar(QtWidgets.QTabWidget):
     """
     overlaySelected = QtCore.Signal(object)
 
-    def __init__(self, overlay: Overlay, parent=None):
+    def __init__(self, overlay: CanvasWidget, parent=None):
         super().__init__(parent)
 
         self._overlay = overlay

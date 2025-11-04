@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import override
 
-from .math import Point, best_edge_index_for_insertion, Op, sample_cubic_path
+from splinker.core.math import Point, best_edge_index_for_insertion, Op, sample_cubic_path
 
 from .registries import register_point_editor
 

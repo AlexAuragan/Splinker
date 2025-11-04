@@ -1,8 +1,7 @@
 from PySide6 import QtWidgets, QtCore
 
 from splinker.core.layer import Layer
-from splinker.widgets import Overlay
-from splinker.widgets.layer_overlay import LayerOverlayWidget
+from splinker.widgets import CanvasWidget
 
 
 class LayerSwitchWidget(QtWidgets.QWidget):
@@ -11,7 +10,7 @@ class LayerSwitchWidget(QtWidgets.QWidget):
     """
     overlayChanged = QtCore.Signal(int)
 
-    def __init__(self, overlay_manager: Overlay):
+    def __init__(self, overlay_manager: CanvasWidget):
         super().__init__()
         self._overlay = overlay_manager
 
@@ -43,7 +42,7 @@ class LayerSwitchWidget(QtWidgets.QWidget):
     @QtCore.Slot()
     def _on_new(self):
         idx = len(self._overlay)
-        idx = self._overlay.add_layer(LayerOverlayWidget(Layer(name=f"Layer {idx+1}")))
+        idx = self._overlay.add_layer(Layer(name=f"Layer {idx+1}"))
         self._select.setCurrentIndex(idx)  # triggers switch via _on_select_changed
 
     @QtCore.Slot(int)

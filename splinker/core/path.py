@@ -3,7 +3,7 @@ from typing import Sequence
 
 from .point_editors import PointEditorComponent, CatmullRomSplinePE
 from .registries import point_editor_registry
-from .math import Point
+from splinker.core.math import Point
 
 @dataclass()
 class Path:

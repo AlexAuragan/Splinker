@@ -1,11 +1,11 @@
-from PySide6 import QtWidgets, QtCore, QtGui
+from PySide6 import QtWidgets, QtGui
 
 from splinker.core import Point
-from splinker.widgets import Overlay
+from splinker.widgets import CanvasWidget
 
 
 class PaletteGradientBar(QtWidgets.QWidget):
-    def __init__(self, overlay: Overlay, parent=None):
+    def __init__(self, overlay: CanvasWidget, parent=None):
         super().__init__(parent)
         self._overlay = overlay
         self.setMinimumWidth(28)

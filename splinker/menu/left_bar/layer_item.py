@@ -1,9 +1,8 @@
 from PySide6 import QtWidgets, QtCore, QtGui
 
-from splinker.core import gradient_registry, point_editor_registry, HSVa
-from splinker.widgets import Overlay
+from splinker.core import gradient_registry, point_editor_registry, Color, Layer
+from splinker.widgets import CanvasWidget
 from splinker.core.point_editors import PointEditorComponent
-from splinker.widgets.layer_overlay import LayerOverlayWidget
 
 
 class LayerItem(QtWidgets.QWidget):
@@ -16,7 +15,7 @@ class LayerItem(QtWidgets.QWidget):
     # emit (overlay_obj, new_name) when the title is renamed by the user
     nameEdited = QtCore.Signal(object, str)
 
-    def __init__(self, overlay: Overlay, name: str = "", parent=None):
+    def __init__(self, overlay: CanvasWidget, name: str = "", parent=None):
         super().__init__(parent)
         self._overlay = overlay
         self._block_item_changed = False
@@ -63,7 +62,7 @@ class LayerItem(QtWidgets.QWidget):
         self._list.itemSelectionChanged.connect(self._activate_self)
 
         # live refresh with spline changes
-        self.layer.pointsChanged.connect(self.refresh)
+        self.overlay.display.pointsChanged.connect(self.refresh)
 
         menu = QtWidgets.QMenu(self._gear)
         grad_menu = menu.addMenu("Gradient")
@@ -91,13 +90,13 @@ class LayerItem(QtWidgets.QWidget):
         return self._overlay[self._layer_idx].name
 
     @property
-    def layer(self) -> LayerOverlayWidget:
+    def layer(self) -> Layer:
         if self._layer_idx < 0 or self._layer_idx >= len(self._overlay):
             raise ValueError(self._layer_idx)
         return self._overlay[self._layer_idx]
 
     @property
-    def overlay(self) -> Overlay:
+    def overlay(self) -> CanvasWidget:
         return self._overlay
 
     # ----- inline title editing ----------------------------------------
@@ -167,13 +166,13 @@ class LayerItem(QtWidgets.QWidget):
             return
 
         # points
-        pts_attr = self.layer.points
+        pts_attr = self.layer.path.points
         pts = pts_attr() if callable(pts_attr) else (pts_attr or [])
 
         # colors
         colors = self.layer.point_colors()
 
-        self.set_points_and_colors(pts or [], [HSVa.from_qcolor(color) for color in colors])
+        self.set_points_and_colors(pts or [], colors)
 
     def set_points_and_colors(self, pts: list[QtCore.QPointF], colors: list | None, /):
         self._block_item_changed = True
@@ -200,14 +199,14 @@ class LayerItem(QtWidgets.QWidget):
         self._block_item_changed = False
 
     # ----- formatting & painting --------------------------------------------
-    def _format_rgb_text(self, idx: int, color: HSVa | None, /) -> str:
+    def _format_rgb_text(self, idx: int, color: Color | None, /) -> str:
         if color is None or not color.isValid():
             raise ValueError(color)
             # return f"{idx:02d}: (?, ?, ?)"
         r, g, b = color.to_rgb()
         return f"{idx:02d}: {r}, {g}, {b}"
 
-    def _apply_item_brushes(self, item: QtWidgets.QListWidgetItem, color: HSVa | None, /):
+    def _apply_item_brushes(self, item: QtWidgets.QListWidgetItem, color: Color | None, /):
         if color is None or not color.isValid():
             item.setBackground(QtGui.QBrush())
             item.setForeground(QtGui.QBrush())
@@ -253,7 +252,7 @@ class LayerItem(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Add point", "No gradient available for this layer.")
             return
 
-        pt = grad.point_at(HSVa.from_qcolor(color))
+        pt = grad.point_at(Color.from_qcolor(color))
         if pt is None:
             QtWidgets.QMessageBox.warning(self, "Add point", "Color not found in gradient.")
             return
@@ -264,14 +263,14 @@ class LayerItem(QtWidgets.QWidget):
 
     # --- helper: validate color is available in current gradient ----------------
     def _color_supported(self, color: QtGui.QColor) -> bool:
-        return self._overlay[self._layer_idx].gradient.point_at(HSVa.from_qcolor(color)) is not None
+        return self._overlay[self._layer_idx].gradient.point_at(Color.from_qcolor(color)) is not None
 
     def _apply_color_edit_row(self, idx: int, color: QtGui.QColor):
         if not (isinstance(color, QtGui.QColor) and color.isValid()):
             return
         # validate against gradient
         grad = self._overlay[self._layer_idx].gradient
-        pt = grad.point_at(HSVa.from_qcolor(color))
+        pt = grad.point_at(Color.from_qcolor(color))
         if pt is None:
             self._notify("Color not available in this gradient")
             return
@@ -280,7 +279,7 @@ class LayerItem(QtWidgets.QWidget):
         path = self.layer.path
         if 0 <= idx < len(path.points):
             path.edit_point(idx, pt)
-            self.layer.update()
+            self._overlay.display.update()
             self._overlay.overlayUpdated.emit(self._layer_idx)
 
         # 2) refresh the row’s item (re-fetch to avoid stale pointer)
