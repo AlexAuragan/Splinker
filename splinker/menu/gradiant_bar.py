@@ -1,6 +1,7 @@
 from PySide6 import QtWidgets, QtGui
+from PySide6.QtGui import QColor
 
-from splinker.core import Point
+from splinker.core import Color
 from splinker.widgets import CanvasWidget
 
 
@@ -10,41 +11,9 @@ class PaletteGradientBar(QtWidgets.QWidget):
         self._overlay = overlay
         self.setMinimumWidth(28)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Expanding)
-        self._overlay.overlayUpdated.connect(lambda *_: self.update())
-        self._overlay.activeLayerChanged.connect(lambda *_: self.update())
+        self._overlay.overlayUpdated.connect(self.update)
+        self._overlay.activeLayerChanged.connect(self.update)
         self._overlay.overlaysChanged.connect(self.update)
-
-
-    def _poly_length_positions(self, pts: list[Point], closed: bool, /) -> list[float]:
-        """
-        Cumulative positions along the control polyline, normalized to [0,1].
-        If closed, includes closing edge.
-        """
-        n = len(pts)
-        if n == 0:
-            return []
-        if n == 1:
-            return [0.0]
-
-        lens: list[float] = [0.0]
-        total = 0.0
-        for i in range(n - 1):
-            dx = float(pts[i + 1][0] - pts[i][0])
-            dy = float(pts[i + 1][1]  - pts[i][1])
-            d = (dx*dx + dy*dy) ** 0.5
-            total += d
-            lens.append(total)
-
-        # Close if needed
-        if closed and n >= 2:
-            dx = float(pts[0][0]  - pts[-1][0])
-            dy = float(pts[0][1] - pts[-1][1])
-            total += (dx*dx + dy*dy) ** 0.5
-
-        if total <= 0.0:
-            return [0.0 for _ in range(n)]
-
-        return [min(1.0, (s / total)) for s in lens]
 
     def _collect_stops(self, /):
         """
@@ -80,7 +49,11 @@ class PaletteGradientBar(QtWidgets.QWidget):
         N = len(samples)
         for i in range(N):
             c = cols[i]
-            if isinstance(c, QtGui.QColor) and c.isValid():
+            if isinstance(c, Color):
+                c = c.to_QColor()
+            if c is None:
+                continue
+            if c.isValid():
                 t = i / (N - 1)
                 stops.append((t, c))
 
