@@ -201,8 +201,7 @@ class LayerItem(QtWidgets.QWidget):
     # ----- formatting & painting --------------------------------------------
     def _format_rgb_text(self, idx: int, color: Color | None, /) -> str:
         if color is None or not color.isValid():
-            raise ValueError(color)
-            # return f"{idx:02d}: (?, ?, ?)"
+            return f"{idx:02d}: (?, ?, ?)"
         r, g, b = color.to_rgb()
         return f"{idx:02d}: {r}, {g}, {b}"
 
@@ -398,7 +397,7 @@ class LayerItem(QtWidgets.QWidget):
         new_editor: PointEditorComponent = editor_cls()
 
         self.layer.path.set_point_editor(new_editor)
-        self.layer.update()
+        self._overlay.update()
 
         # Notify observers (left bar list, gradient bar, etc.)
         self._overlay.overlayUpdated.emit(self._layer_idx)

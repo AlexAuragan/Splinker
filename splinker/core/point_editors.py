@@ -164,7 +164,7 @@ class CirclePE(PointEditorComponent):
             return []
         cx, cy = pts[0]
         px, py = pts[1]
-        rx = px - cx;
+        rx = px - cx
         ry = py - cy
         r = (rx * rx + ry * ry) ** 0.5
         if r <= 0.0:

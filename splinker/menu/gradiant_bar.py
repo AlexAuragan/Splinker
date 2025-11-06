@@ -52,8 +52,9 @@ class PaletteGradientBar(QtWidgets.QWidget):
             if isinstance(c, Color):
                 c = c.to_QColor()
             if c is None:
-                continue
-            if c.isValid():
+                t = i / (N - 1)
+                stops.append((t, QtGui.QColor(0,0,0,0)))
+            elif c.isValid():
                 t = i / (N - 1)
                 stops.append((t, c))
 
