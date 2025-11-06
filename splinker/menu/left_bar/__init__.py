@@ -13,6 +13,7 @@ class MenuBar(QtWidgets.QTabWidget):
       - Actions: placeholder for future commands.
     """
     overlaySelected = QtCore.Signal(object)
+    tabChanged = QtCore.Signal(str)
 
     def __init__(self, overlay: CanvasWidget, parent=None):
         super().__init__(parent)
@@ -33,6 +34,7 @@ class MenuBar(QtWidgets.QTabWidget):
         self.addTab(self._actions_tab, "Actions")
 
         self._path_tab.layerSelected.connect(self.overlaySelected)
+        self.currentChanged.connect(self._on_tab_changed)
 
 
     def current_overlay(self, /):
@@ -43,6 +45,10 @@ class MenuBar(QtWidgets.QTabWidget):
 
     def refresh(self, /):
         self._path_tab.refresh_all()
+
+    def _on_tab_changed(self, index: int):
+        name = self.tabText(index)
+        self.tabChanged.emit(name)
 
 
 __all__ = [

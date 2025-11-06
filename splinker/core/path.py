@@ -1,9 +1,13 @@
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Sequence, TYPE_CHECKING
 
 from .point_editors import PointEditorComponent, CatmullRomSplinePE
 from .registries import point_editor_registry
 from splinker.core.math import Point
+
+if TYPE_CHECKING:
+    from PySide6 import QtGui
+
 
 @dataclass()
 class Path:
@@ -84,3 +88,24 @@ class Path:
         editor = point_editor_registry[data["editor"]]()
         params = dict(data.get("params", {}))
         return cls(points=pts, closed=closed, editor=editor, params=params)
+
+    def make_qpath(self) -> "QtGui.QPainterPath":
+        from PySide6 import QtCore, QtGui
+        pts = self.points
+        closed = self.closed
+        ops = self.editor.path_ops(pts, closed)
+
+        qp = QtGui.QPainterPath()
+        qpf = lambda t: QtCore.QPointF(t[0], t[1])
+
+        for op, data in ops:
+            if op == "M":
+                qp.moveTo(qpf(data))
+            elif op == "L":
+                qp.lineTo(qpf(data))
+            elif op == "C":
+                c1, c2, p2 = data
+                qp.cubicTo(qpf(c1), qpf(c2), qpf(p2))
+            elif op == "Z":
+                qp.closeSubpath()
+        return qp

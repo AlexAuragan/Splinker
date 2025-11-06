@@ -9,6 +9,7 @@ from .path import Path
 class Layer:
     gradient: Gradient = field(default_factory=HsvWheelGradient)
     path: Path = field(default_factory=Path)
+    colors: list[Color] = field(default_factory=list)
     name: str = "Overlay"
 
     # Accessor

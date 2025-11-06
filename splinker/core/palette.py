@@ -1,7 +1,7 @@
 from copy import deepcopy
 from dataclasses import asdict
 
-from splinker.core import Layer
+from splinker.core import Layer, Point
 
 
 class Palette:
@@ -9,6 +9,8 @@ class Palette:
         self._layers = layers or []
         self._name = name
         self._active_idx = active_idx if 0 <= active_idx < len(self._layers) else (0 if self._layers else -1)
+
+
 
     @property
     def name(self):
@@ -104,3 +106,7 @@ class Palette:
             layers=layers,
             active_idx=data.get("active_idx", -1),
         )
+
+    def contains_point(self, point: Point):
+        return self.active_layer.gradient.contains_point(point[0], point[1])
+

@@ -4,7 +4,7 @@ from PySide6 import QtCore, QtWidgets
 
 from splinker.core import HsvSquareGradient, CatmullRomSplinePE, Layer, Path, Palette
 from splinker.menu import Bar, MenuBar, PaletteGradientBar
-from splinker.widgets import CanvasWidget, LayerDisplayComponent
+from splinker.widgets import CanvasWidget
 
 class MyWidget(QtWidgets.QWidget):
     def __init__(self):
@@ -21,22 +21,22 @@ class MyWidget(QtWidgets.QWidget):
                 name="Layer 1"
             )]
         )
-        self.overlay = CanvasWidget(palette=first_palette, parent=self)
+        self.canvas = CanvasWidget(palette=first_palette, parent=self)
 
-        self.menu_bar = MenuBar(self.overlay)
-        self.top_bar = Bar(self.overlay)
+        self.menu_bar = MenuBar(self.canvas)
+        self.top_bar = Bar(self.canvas)
 
-        self.palette_bar = PaletteGradientBar(self.overlay,self)
+        self.palette_bar = PaletteGradientBar(self.canvas, self)
 
         self.main_layout.addWidget(self.menu_bar)
-        self.main_layout.addWidget(self.overlay, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.main_layout.addWidget(self.canvas, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
         self.main_layout.addWidget(self.palette_bar,  alignment=QtCore.Qt.AlignmentFlag.AlignRight)
         self.layout.addWidget(self.top_bar, alignment=QtCore.Qt.AlignmentFlag.AlignTop)
         self.layout.addLayout(self.main_layout)
 
-        self.overlay.overlayUpdated.connect(self.menu_bar.refresh)
-        self.overlay.display.pointsChanged.connect(self.menu_bar.refresh)
-
+        self.canvas.overlayUpdated.connect(self.menu_bar.refresh)
+        self.canvas.display.pointsChanged.connect(self.menu_bar.refresh)
+        self.menu_bar.tabChanged.connect(self.canvas.on_tab_changed)
 
 
 if __name__ == "__main__":

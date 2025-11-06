@@ -3,7 +3,7 @@ from PySide6 import QtWidgets, QtCore
 from splinker.core import Layer, Gradient
 from splinker.core.palette import Palette
 
-from splinker.widgets.layer_display import LayerDisplayComponent
+from splinker.widgets.layer_display import PaletteDisplayComponent
 
 
 class CanvasWidget(QtWidgets.QWidget):
@@ -24,7 +24,7 @@ class CanvasWidget(QtWidgets.QWidget):
         self._palette: Palette = palette
 
         # single display component bound to the active layer
-        self._display = LayerDisplayComponent(palette=self._palette, parent=self)
+        self._display = PaletteDisplayComponent(palette=self._palette, parent=self)
         self._display.pointsChanged.connect(self._emit_overlay_updated_for_active)
 
         lay = QtWidgets.QVBoxLayout(self)
@@ -37,7 +37,7 @@ class CanvasWidget(QtWidgets.QWidget):
         return self._palette.active_layer
 
     @property
-    def display(self) -> LayerDisplayComponent:
+    def display(self) -> PaletteDisplayComponent:
         return self._display
 
     def get_active_idx(self) -> int:
@@ -145,3 +145,14 @@ class CanvasWidget(QtWidgets.QWidget):
         # keep external listeners informed
         idx = self._palette.active_idx
         self.overlayUpdated.emit(idx)
+
+    def on_tab_changed(self, name):
+        match name:
+            case "Path":
+                self.display.path_editor_dc.activate()
+            case "Palette":
+                self.display.path_editor_dc.deactivate()
+            case "Actions":
+                self.display.path_editor_dc.deactivate()
+            case _:
+                raise ValueError(name)

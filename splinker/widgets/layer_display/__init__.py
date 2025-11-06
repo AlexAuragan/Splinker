@@ -1,0 +1,1 @@
+from .palette_display import PaletteDisplayComponent
