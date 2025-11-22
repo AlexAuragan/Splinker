@@ -33,7 +33,7 @@ class PaletteGradientBar(QtWidgets.QWidget):
         # 1) sample along the *actual path* (editor-aware)
         #    keep it modest to avoid hundreds of stops in a tiny bar
         SAMPLES = 64
-        samples = path.editor.interpolate(pts, path.closed, n=SAMPLES)
+        samples = path.interpolate(n=SAMPLES)
         if not samples or len(samples) < 2:
             return [], False
 

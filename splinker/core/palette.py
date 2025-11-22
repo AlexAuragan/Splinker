@@ -1,11 +1,12 @@
 from copy import deepcopy
-from dataclasses import asdict
+from pathlib import Path
 
+from splinker.config import SAVE_FOLDER
 from splinker.core import Layer, Point
 
 
 class Palette:
-    def __init__(self, name: str = None, layers: list[Layer] = None, active_idx: int = -1):
+    def __init__(self, name: str, layers: list[Layer] = None, active_idx: int = -1):
         self._layers = layers or []
         self._name = name
         self._active_idx = active_idx if 0 <= active_idx < len(self._layers) else (0 if self._layers else -1)
@@ -15,6 +16,9 @@ class Palette:
     @property
     def name(self):
         return self._name
+
+    def name_to_key(self):
+        return self._name.lower().replace(" ", "_")
 
     @property
     def active_idx(self) -> int:
@@ -96,16 +100,42 @@ class Palette:
         }
 
     @classmethod
-    def from_dict(cls, data: dict, layer_factory) -> "Palette":
+    def from_dict(cls, data: dict) -> "Palette":
         """
         layer_factory: callable that takes a layer dict and returns a Layer object.
         """
-        layers = [layer_factory(ld) for ld in data.get("layers", [])]
+        layers = [Layer(ld) for ld in data.get("layers", [])]
         return cls(
-            name=data.get("name"),
+            name=str(data.get("name")),
             layers=layers,
             active_idx=data.get("active_idx", -1),
         )
+
+    def save(self, save_path: Path = None) -> None:
+        import json
+        if save_path is None:
+            save_path = SAVE_FOLDER
+        if not save_path.exists():
+            raise FileNotFoundError(f"Path {save_path} does not exist.")
+        file_name = self.name_to_key() + ".json"
+        content = self.to_dict()
+        with open(save_path / file_name) as f:
+            json.dump(content, f)
+
+    @staticmethod
+    def load(file_name, save_path: Path = None):
+        import json
+        file_name = file_name + ".json" if ".json" not in file_name else file_name
+        if save_path is None:
+            save_path = SAVE_FOLDER
+
+        file_path = save_path / file_name
+        if not file_path.exists():
+            raise FileNotFoundError(file_path)
+
+        with open(file_path) as f:
+            data = json.load(f)
+        return Palette.from_dict(data)
 
     def contains_point(self, point: Point):
         return self.active_layer.gradient.contains_point(point[0], point[1])

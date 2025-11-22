@@ -111,6 +111,7 @@ class PathTab(QtWidgets.QWidget):
         for i in range(self._list.count()):
             w = self._list.itemWidget(self._list.item(i))
             if isinstance(w, LayerItem):
+
                 w.refresh()
 
     def _on_row_changed(self, row: int):

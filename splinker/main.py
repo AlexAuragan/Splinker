@@ -17,7 +17,7 @@ class MyWidget(QtWidgets.QWidget):
             "First Palette",
             [Layer(
                 gradient=HsvSquareGradient(300, 300, 298, hue=0),
-                path=Path(editor=CatmullRomSplinePE()),
+                path=Path(),
                 name="Layer 1"
             )]
         )

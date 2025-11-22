@@ -10,9 +10,7 @@ class LayerItem(QtWidgets.QWidget):
     One overlay 'row' that contains its own list of points/colors.
     Mirrors the previous PathTab behavior but scoped to a single overlay/spline.
     """
-    # Let the row announce activation (e.g., when user clicks "Activate")
     requestActivate = QtCore.Signal(object)  # emits the overlay
-    # emit (overlay_obj, new_name) when the title is renamed by the user
     nameEdited = QtCore.Signal(object, str)
 
     def __init__(self, overlay: CanvasWidget, name: str = "", parent=None):
@@ -336,8 +334,8 @@ class LayerItem(QtWidgets.QWidget):
     def _apply_color_edit(self, idx: int, item: QtWidgets.QListWidgetItem, color: QtGui.QColor, /):
         self._block_item_changed = True
         item.setData(QtCore.Qt.UserRole, color)
-        item.setText(self._format_rgb_text(idx, color))
-        self._apply_item_brushes(item, color)
+        item.setText(self._format_rgb_text(idx, Color.from_qcolor(color)))
+        self._apply_item_brushes(item, Color.from_qcolor(color))
         self._block_item_changed = False
 
     def _revert_item(self, idx: int, item: QtWidgets.QListWidgetItem, /):
@@ -381,7 +379,7 @@ class LayerItem(QtWidgets.QWidget):
         Instantiate the selected gradient class using its own defaults,
         and apply it to the active layer.
         """
-        layer_widget: LayerOverlayWidget = self._overlay[self._layer_idx]
+        layer_widget: Layer = self._overlay[self._layer_idx]
         layer_widget.set_gradient(grad_cls())
         self.requestActivate.emit(self)
 

@@ -150,9 +150,12 @@ class CanvasWidget(QtWidgets.QWidget):
         match name:
             case "Path":
                 self.display.path_editor_dc.activate()
+                self.display.distribution_editor_dc.deactivate()
             case "Palette":
                 self.display.path_editor_dc.deactivate()
+                self.display.distribution_editor_dc.activate()
             case "Actions":
                 self.display.path_editor_dc.deactivate()
+                self.display.distribution_editor_dc.deactivate()
             case _:
                 raise ValueError(name)

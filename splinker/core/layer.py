@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 
 from . import Color, Point
 from .gradients import Gradient, HsvWheelGradient
@@ -9,21 +9,18 @@ from .path import Path
 class Layer:
     gradient: Gradient = field(default_factory=HsvWheelGradient)
     path: Path = field(default_factory=Path)
+    distribution_points: list[Point] = field(default_factory=list)
     colors: list[Color] = field(default_factory=list)
     name: str = "Overlay"
 
     # Accessor
     @property
-    def points(self):
+    def path_points(self):
         return self.path.points
 
     @property
     def closed(self):
         return self.path.closed
-
-    @property
-    def editor(self):
-        return self.path.editor
 
     @property
     def path_param(self):
@@ -37,7 +34,7 @@ class Layer:
         return self.gradient.color_at(point[0], point[1])
 
     def point_colors(self):
-        return [self.color_at(point) for point in self.points]
+        return [self.color_at(point) for point in self.path_points]
 
     def sample(self, n=64):
         """
@@ -52,7 +49,7 @@ class Layer:
 
         # 1) sample along the *actual path* (editor-aware)
         #    keep it modest to avoid hundreds of stops in a tiny bar
-        samples = self.path.editor.interpolate(points, self.path.closed, n=n)
+        samples = self.path.interpolate(n=n)
         if not samples or len(samples) < 2:
             return [], False
 
@@ -74,7 +71,7 @@ class Layer:
             return [], False
 
         # clamp/sort just in case (Qt expects non-decreasing positions)
-        stops.sort(key=lambda t: t[0])
+        stops.sort(key=lambda x: x[0])
         return stops, True
 
     def to_dict(self):

@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Sequence, TYPE_CHECKING
 
+from . import project_point_to_segment, dist2
 from .point_editors import PointEditorComponent, CatmullRomSplinePE
 from .registries import point_editor_registry
 from splinker.core.math import Point
@@ -19,7 +20,7 @@ class Path:
     """
     points: list[Point] = field(default_factory=list)
     closed: bool = False
-    editor: PointEditorComponent = field(default_factory=CatmullRomSplinePE)
+    _editor: PointEditorComponent = field(default_factory=CatmullRomSplinePE)
     params: dict[str, float] = field(default_factory=dict)
 
 
@@ -32,22 +33,53 @@ class Path:
     def as_point(self) -> Sequence[Point]:
         return tuple(self.points)
 
+    def interpolate(self, n=200):
+        return self._editor.interpolate(self.points,self.closed,n)
+
+    def closest_point(self, point: Point) -> Point:
+        """
+        Return the closest point on the interpolated path to the given point.
+
+        The interpolation is sampled densely (200 points) and the shortest
+        projection to the resulting polyline is returned. If the path has no
+        points, the input is returned unchanged.
+        """
+        samples = self._editor.interpolate(self.points, self.closed, n=200)
+        if not samples:
+            return point
+
+        best_point = samples[0]
+        best_d2 = dist2(point, best_point)
+
+        for a, b in zip(samples, samples[1:]):
+            candidate, d2 = project_point_to_segment(point, a, b)
+            if d2 < best_d2:
+                best_point = candidate
+                best_d2 = d2
+
+        if self.closed and len(samples) > 1 and samples[-1] != samples[0]:
+            candidate, d2 = project_point_to_segment(point, samples[-1], samples[0])
+            if d2 < best_d2:
+                best_point = candidate
+
+        return best_point
+
     def segments(self) -> Sequence[tuple[Point, Point, Point]]:
-        return tuple(self.editor.segments(self.points, self.closed))
+        return tuple(self._editor.segments(self.points, self.closed))
 
     def add_point(self, p: Point) -> "Path":
-        self.points = self.editor.add_point(self.points, p, self.closed)
+        self.points = self._editor.add_point(self.points, p, self.closed)
         self.closed = (self.closed and len(self.points) >= 3)
         return self
 
 
     def remove_point(self, index: int) -> "Path":
-        self.points = self.editor.remove_point(self.points, index)
+        self.points = self._editor.remove_point(self.points, index)
         self.closed = self.closed if len(self.points) >= 3 else False
         return self
 
     def edit_point(self, index: int, p: Point) -> "Path":
-        self.points = self.editor.edit_point(self.points, index, p)
+        self.points = self._editor.edit_point(self.points, index, p)
         return self
 
 
@@ -59,10 +91,10 @@ class Path:
         - Keep 'closed' if the new editor supports it; circles force closed.
         """
         # sample with current editor
-        sample = self.editor.interpolate(self.points, self.closed, n=100)
+        sample = self._editor.interpolate(self.points, self.closed, n=100)
         # fit target controls
         new_points = new_editor.fit_from_sample(sample, self.closed)
-        self.editor = new_editor
+        self._editor = new_editor
         self.points = new_points
         self.closed = new_editor.default_closed or (self.closed if len(new_points) >= 3 else False)
         return self
@@ -78,22 +110,22 @@ class Path:
             "points": list(self.points),
             "closed": bool(self.closed),
             "params": dict(self.params),
-            "editor": {v:k for k,v in point_editor_registry.items()}.get(type(self.editor))
+            "editor": {v:k for k,v in point_editor_registry.items()}.get(type(self._editor))
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Path":
-        pts = [tuple(map(float, p)) for p in data["points"]]
+        pts: list[Point] = [tuple(map(float, p)) for p in data["points"]]
         closed = data["closed"]
         editor = point_editor_registry[data["editor"]]()
         params = dict(data.get("params", {}))
-        return cls(points=pts, closed=closed, editor=editor, params=params)
+        return cls(points=pts, closed=closed, _editor=editor, params=params)
 
     def make_qpath(self) -> "QtGui.QPainterPath":
         from PySide6 import QtCore, QtGui
         pts = self.points
         closed = self.closed
-        ops = self.editor.path_ops(pts, closed)
+        ops = self._editor.path_ops(pts, closed)
 
         qp = QtGui.QPainterPath()
         qpf = lambda t: QtCore.QPointF(t[0], t[1])
